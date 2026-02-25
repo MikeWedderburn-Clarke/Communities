@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Header } from "@/components/header";
 import { RoleBadges } from "@/components/role-badges";
+import { SocialIcons } from "@/components/social-icons";
 import { getEventDetail } from "@/services/events";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
@@ -48,16 +49,24 @@ export default async function EventDetailPage({
             Attendance ({event.attendeeCount} going)
           </h2>
           <div className="mt-2">
-            <RoleBadges roleCounts={event.roleCounts} />
+            <RoleBadges roleCounts={event.roleCounts} teacherCount={event.teacherCount} />
           </div>
 
           {/* Names only shown to logged-in users */}
           {user && event.visibleAttendees.length > 0 && (
             <ul className="mt-3 space-y-1">
               {event.visibleAttendees.map((a, i) => (
-                <li key={i} className="text-sm text-gray-600">
-                  {a.name}{" "}
+                <li key={i} className="flex items-center gap-1 text-sm text-gray-600">
+                  <Link href={`/profile/${a.userId}`} className="hover:text-indigo-600 hover:underline">
+                    {a.name}
+                  </Link>
+                  <SocialIcons {...a.socialLinks} />{" "}
                   <span className="text-xs text-gray-400">({a.role})</span>
+                  {a.isTeaching && (
+                    <span className="ml-1.5 inline-flex items-center rounded bg-rose-100 px-1.5 py-0.5 text-xs text-rose-800">
+                      Teacher
+                    </span>
+                  )}
                   {a.hidden && (
                     <span className="ml-1.5 inline-flex items-center rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
                       hidden
@@ -87,6 +96,9 @@ export default async function EventDetailPage({
               <RsvpForm
                 eventId={event.id}
                 currentRsvp={event.currentUserRsvp}
+                isTeacherApproved={user?.isTeacherApproved ?? false}
+                defaultRole={user?.defaultRole ?? null}
+                defaultShowName={user?.defaultShowName ?? null}
               />
             </>
           ) : (

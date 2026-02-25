@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Validation failed", details: result.errors }, { status: 400 });
   }
 
-  const { eventId, role, showName } = result.data;
+  const { eventId, role, showName, isTeaching } = result.data;
 
   // Verify event exists
   const event = await getEventById(db, eventId);
@@ -30,7 +30,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
 
-  await createOrUpdateRsvp(db, user.id, eventId, role, showName);
+  // Only approved teachers can mark themselves as teaching
+  if (isTeaching && !user.isTeacherApproved) {
+    return NextResponse.json({ error: "You must be an approved teacher to mark as teaching" }, { status: 403 });
+  }
+
+  await createOrUpdateRsvp(db, user.id, eventId, role, showName, isTeaching);
 
   return NextResponse.json({ ok: true });
 }

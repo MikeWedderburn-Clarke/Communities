@@ -29,7 +29,15 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     .limit(1);
 
   if (!user) return null;
-  return { id: user.id, name: user.name, email: user.email, isAdmin: user.isAdmin };
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    isAdmin: user.isAdmin,
+    isTeacherApproved: user.isTeacherApproved,
+    defaultRole: (user.defaultRole as SessionUser["defaultRole"]) ?? null,
+    defaultShowName: user.defaultShowName ?? null,
+  };
 }
 
 /** Set the session cookie to log in as a user. */
@@ -52,5 +60,13 @@ export async function clearSessionCookie(): Promise<void> {
 /** List all available mock users (for the login picker). */
 export async function getMockUsers(): Promise<SessionUser[]> {
   const rows = await db.select().from(users);
-  return rows.map((u) => ({ id: u.id, name: u.name, email: u.email, isAdmin: u.isAdmin }));
+  return rows.map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    isAdmin: u.isAdmin,
+    isTeacherApproved: u.isTeacherApproved,
+    defaultRole: (u.defaultRole as SessionUser["defaultRole"]) ?? null,
+    defaultShowName: u.defaultShowName ?? null,
+  }));
 }

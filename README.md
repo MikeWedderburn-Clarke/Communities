@@ -8,6 +8,10 @@ An AcroYoga community events platform — browse events, RSVP with your role, an
 npm install
 npm run db:seed   # creates community.db with sample London events
 npm run dev       # starts dev server at http://localhost:3000
+
+## Restart
+```bash
+rm -f community.db community.db-shm community.db-wal && npx tsx src/db/seed.ts && npm run dev
 ```
 
 ## Available scripts

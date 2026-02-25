@@ -7,7 +7,7 @@ export interface ValidationError {
 
 export function validateRsvpInput(body: unknown): {
   valid: true;
-  data: { eventId: string; role: Role; showName: boolean };
+  data: { eventId: string; role: Role; showName: boolean; isTeaching: boolean };
 } | {
   valid: false;
   errors: ValidationError[];
@@ -32,6 +32,10 @@ export function validateRsvpInput(body: unknown): {
     errors.push({ field: "showName", message: "showName must be a boolean" });
   }
 
+  if (obj.isTeaching !== undefined && typeof obj.isTeaching !== "boolean") {
+    errors.push({ field: "isTeaching", message: "isTeaching must be a boolean" });
+  }
+
   if (errors.length > 0) {
     return { valid: false, errors };
   }
@@ -42,6 +46,7 @@ export function validateRsvpInput(body: unknown): {
       eventId: (obj.eventId as string).trim(),
       role: obj.role as Role,
       showName: obj.showName as boolean,
+      isTeaching: (obj.isTeaching as boolean) ?? false,
     },
   };
 }

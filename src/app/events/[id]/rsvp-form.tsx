@@ -2,19 +2,24 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ROLES, type Role } from "@/types";
 
 interface Props {
   eventId: string;
-  currentRsvp: { role: Role; showName: boolean } | null;
+  currentRsvp: { role: Role; showName: boolean; isTeaching: boolean } | null;
+  isTeacherApproved: boolean;
+  defaultRole: Role | null;
+  defaultShowName: boolean | null;
 }
 
-export function RsvpForm({ eventId, currentRsvp }: Props) {
+export function RsvpForm({ eventId, currentRsvp, isTeacherApproved, defaultRole, defaultShowName }: Props) {
   const router = useRouter();
-  const [role, setRole] = useState<Role>(currentRsvp?.role ?? "Base");
-  const [showName, setShowName] = useState(currentRsvp?.showName ?? true);
+  const [role, setRole] = useState<Role>(currentRsvp?.role ?? defaultRole ?? "Base");
+  const [showName, setShowName] = useState(currentRsvp?.showName ?? defaultShowName ?? true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isTeaching, setIsTeaching] = useState(currentRsvp?.isTeaching ?? false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -24,7 +29,7 @@ export function RsvpForm({ eventId, currentRsvp }: Props) {
     const res = await fetch("/api/rsvp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ eventId, role, showName }),
+      body: JSON.stringify({ eventId, role, showName, isTeaching }),
     });
 
     if (!res.ok) {
@@ -98,6 +103,34 @@ export function RsvpForm({ eventId, currentRsvp }: Props) {
         />
         Show my name publicly
       </label>
+
+      <p className="text-xs text-gray-400">
+        These settings apply to this event only.{" "}
+        <Link href="/profile" className="text-indigo-500 hover:underline">
+          Change your defaults
+        </Link>
+        .
+      </p>
+
+      {isTeacherApproved ? (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={isTeaching}
+            onChange={(e) => setIsTeaching(e.target.checked)}
+            className="rounded border-gray-300"
+          />
+          I&apos;m teaching this event
+        </label>
+      ) : (
+        <p className="text-sm text-gray-500">
+          Want to teach?{" "}
+          <Link href="/profile" className="text-indigo-600 hover:underline">
+            Request teacher status
+          </Link>{" "}
+          on your profile.
+        </p>
+      )}
 
       {error && (
         <p className="text-sm text-red-600">{error}</p>
