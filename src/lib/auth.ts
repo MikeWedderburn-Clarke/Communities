@@ -29,7 +29,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     .limit(1);
 
   if (!user) return null;
-  return { id: user.id, name: user.name, email: user.email };
+  return { id: user.id, name: user.name, email: user.email, isAdmin: user.isAdmin };
 }
 
 /** Set the session cookie to log in as a user. */
@@ -52,5 +52,5 @@ export async function clearSessionCookie(): Promise<void> {
 /** List all available mock users (for the login picker). */
 export async function getMockUsers(): Promise<SessionUser[]> {
   const rows = await db.select().from(users);
-  return rows.map((u) => ({ id: u.id, name: u.name, email: u.email }));
+  return rows.map((u) => ({ id: u.id, name: u.name, email: u.email, isAdmin: u.isAdmin }));
 }

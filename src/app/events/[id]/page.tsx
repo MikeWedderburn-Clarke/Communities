@@ -16,7 +16,7 @@ export default async function EventDetailPage({
 }) {
   const { id } = await params;
   const user = await getCurrentUser();
-  const event = await getEventDetail(db, id, user?.id ?? null);
+  const event = await getEventDetail(db, id, user?.id ?? null, user?.isAdmin ?? false);
 
   if (!event) notFound();
 
@@ -58,6 +58,11 @@ export default async function EventDetailPage({
                 <li key={i} className="text-sm text-gray-600">
                   {a.name}{" "}
                   <span className="text-xs text-gray-400">({a.role})</span>
+                  {a.hidden && (
+                    <span className="ml-1.5 inline-flex items-center rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+                      hidden
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>

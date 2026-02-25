@@ -21,8 +21,14 @@ export interface EventSummary {
 }
 
 export interface EventDetail extends EventSummary {
-  /** Names of attendees who opted in — only populated for logged-in users. */
-  visibleAttendees: { name: string; role: Role }[];
+  /**
+   * Attendees visible to the current viewer.
+   * - Anonymous: empty array
+   * - Regular user: only attendees with showName=true (hidden=false),
+   *   plus the user's own entry if they RSVP'd with showName=false (hidden=true)
+   * - Admin: all attendees; those with showName=false have hidden=true
+   */
+  visibleAttendees: { name: string; role: Role; hidden: boolean }[];
   /** Whether the current user has already RSVP'd. */
   currentUserRsvp: { role: Role; showName: boolean } | null;
 }
@@ -38,4 +44,5 @@ export interface SessionUser {
   id: string;
   name: string;
   email: string;
+  isAdmin: boolean;
 }

@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { getMockUsers, setSessionCookie } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 export default async function LoginPage({
   searchParams,
 }: {
@@ -35,6 +37,11 @@ export default async function LoginPage({
             className="block w-full rounded-lg border border-gray-200 px-4 py-3 text-left hover:border-indigo-400 hover:bg-indigo-50"
           >
             <span className="font-medium">{user.name}</span>
+            {user.isAdmin && (
+              <span className="ml-1.5 inline-flex items-center rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">
+                admin
+              </span>
+            )}
             <span className="ml-2 text-sm text-gray-500">{user.email}</span>
           </button>
         ))}

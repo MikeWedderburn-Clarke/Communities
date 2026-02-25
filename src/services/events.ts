@@ -19,15 +19,34 @@ export function aggregateRoles(rsvps: { role: string }[]): RoleCounts {
 }
 
 /**
- * Filter attendees to those with showName=true, returning only name + role.
- * This is the ONLY path through which attendee names are exposed.
+ * Build the list of attendees visible to the current viewer.
+ *
+ * Rules:
+ * - Admin: sees ALL attendees. Those with showName=false get hidden=true.
+ * - Regular user: sees attendees with showName=true (hidden=false),
+ *   plus their own entry if they RSVP'd with showName=false (hidden=true).
+ * - Anonymous: empty array (handled by caller).
  */
 export function visibleAttendees(
-  rsvps: { showName: boolean; role: string; userName: string }[]
-): { name: string; role: Role }[] {
+  rsvps: { showName: boolean; role: string; userName: string; userId: string }[],
+  viewerUserId: string | null,
+  isAdmin: boolean
+): { name: string; role: Role; hidden: boolean }[] {
+  if (isAdmin) {
+    return rsvps.map((r) => ({
+      name: r.userName,
+      role: r.role as Role,
+      hidden: !r.showName,
+    }));
+  }
+
   return rsvps
-    .filter((r) => r.showName)
-    .map((r) => ({ name: r.userName, role: r.role as Role }));
+    .filter((r) => r.showName || r.userId === viewerUserId)
+    .map((r) => ({
+      name: r.userName,
+      role: r.role as Role,
+      hidden: !r.showName,
+    }));
 }
 
 // ── Queries ────────────────────────────────────────────────────────
@@ -91,7 +110,8 @@ export async function getAllEvents(db: Db): Promise<EventSummary[]> {
 export async function getEventDetail(
   db: Db,
   eventId: string,
-  currentUserId: string | null
+  currentUserId: string | null,
+  isAdmin: boolean = false
 ): Promise<EventDetail | null> {
   const [event] = await db
     .select()
@@ -114,8 +134,10 @@ export async function getEventDetail(
 
   const roleCounts = aggregateRoles(rsvpRows);
 
-  // Only expose names to logged-in users
-  const visible = currentUserId ? visibleAttendees(rsvpRows) : [];
+  // Only expose names to logged-in users; admin sees all
+  const visible = currentUserId
+    ? visibleAttendees(rsvpRows, currentUserId, isAdmin)
+    : [];
 
   // Check if current user has RSVP'd
   let currentUserRsvp: EventDetail["currentUserRsvp"] = null;

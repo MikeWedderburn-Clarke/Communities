@@ -11,7 +11,8 @@ sqlite.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE
+    email TEXT NOT NULL UNIQUE,
+    is_admin INTEGER NOT NULL DEFAULT 0
   );
   CREATE TABLE IF NOT EXISTS events (
     id TEXT PRIMARY KEY,
@@ -32,17 +33,17 @@ sqlite.exec(`
 
 // ── Seed users (mock auth accounts) ────────────────────────────────
 const seedUsers = [
-  { id: "user-alice", name: "Alice Johnson", email: "alice@example.com" },
-  { id: "user-bob", name: "Bob Smith", email: "bob@example.com" },
-  { id: "user-carol", name: "Carol Williams", email: "carol@example.com" },
-  { id: "user-dan", name: "Dan Brown", email: "dan@example.com" },
+  { id: "user-alice", name: "Alice Johnson", email: "alice@example.com", isAdmin: 0 },
+  { id: "user-bob", name: "Bob Smith", email: "bob@example.com", isAdmin: 0 },
+  { id: "user-carol", name: "Carol Williams", email: "carol@example.com", isAdmin: 0 },
+  { id: "user-dan", name: "Dan Brown", email: "dan@example.com", isAdmin: 1 },
 ];
 
 const insertUser = sqlite.prepare(
-  "INSERT OR IGNORE INTO users (id, name, email) VALUES (?, ?, ?)"
+  "INSERT OR IGNORE INTO users (id, name, email, is_admin) VALUES (?, ?, ?, ?)"
 );
 for (const u of seedUsers) {
-  insertUser.run(u.id, u.name, u.email);
+  insertUser.run(u.id, u.name, u.email, u.isAdmin);
 }
 
 // ── Seed events (London AcroYoga) ──────────────────────────────────

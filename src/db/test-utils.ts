@@ -16,7 +16,8 @@ export function createTestDb() {
     CREATE TABLE users (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
-      email TEXT NOT NULL UNIQUE
+      email TEXT NOT NULL UNIQUE,
+      is_admin INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE events (
       id TEXT PRIMARY KEY,

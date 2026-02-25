@@ -12,9 +12,10 @@ type TestDb = ReturnType<typeof createTestDb>;
 
 function seedTestData(db: TestDb) {
   db.insert(schema.users).values([
-    { id: "u1", name: "Alice", email: "alice@test.com" },
-    { id: "u2", name: "Bob", email: "bob@test.com" },
-    { id: "u3", name: "Carol", email: "carol@test.com" },
+    { id: "u1", name: "Alice", email: "alice@test.com", isAdmin: false },
+    { id: "u2", name: "Bob", email: "bob@test.com", isAdmin: false },
+    { id: "u3", name: "Carol", email: "carol@test.com", isAdmin: false },
+    { id: "u-admin", name: "Dan", email: "dan@test.com", isAdmin: true },
   ]).run();
 
   db.insert(schema.events).values({
@@ -48,7 +49,7 @@ describe("event detail visibility rules", () => {
     expect(detail!.roleCounts.Flyer).toBe(1);
   });
 
-  it("exposes names only for showName=true to logged-in users", async () => {
+  it("exposes names only for showName=true to regular logged-in users", async () => {
     await createOrUpdateRsvp(db, "u1", "e1", "Base", true);  // Alice: visible
     await createOrUpdateRsvp(db, "u2", "e1", "Flyer", false); // Bob: hidden
     await createOrUpdateRsvp(db, "u3", "e1", "Spotter", true); // Carol: visible
@@ -61,6 +62,43 @@ describe("event detail visibility rules", () => {
     expect(names).not.toContain("Bob");
   });
 
+  it("shows own hidden entry to the user themselves", async () => {
+    await createOrUpdateRsvp(db, "u1", "e1", "Base", true);
+    await createOrUpdateRsvp(db, "u2", "e1", "Flyer", false); // Bob hides name
+
+    // Viewing as Bob — should see Alice (public) + own entry with hidden=true
+    const detail = await getEventDetail(db, "e1", "u2");
+    expect(detail!.visibleAttendees).toHaveLength(2);
+    const bob = detail!.visibleAttendees.find((a) => a.name === "Bob");
+    expect(bob).toEqual({ name: "Bob", role: "Flyer", hidden: true });
+    const alice = detail!.visibleAttendees.find((a) => a.name === "Alice");
+    expect(alice).toEqual({ name: "Alice", role: "Base", hidden: false });
+  });
+
+  it("admin sees ALL attendees including hidden ones", async () => {
+    await createOrUpdateRsvp(db, "u1", "e1", "Base", true);
+    await createOrUpdateRsvp(db, "u2", "e1", "Flyer", false);
+    await createOrUpdateRsvp(db, "u3", "e1", "Spotter", true);
+
+    const detail = await getEventDetail(db, "e1", "u-admin", true);
+    expect(detail!.visibleAttendees).toHaveLength(3);
+    const names = detail!.visibleAttendees.map((a) => a.name);
+    expect(names).toContain("Alice");
+    expect(names).toContain("Bob");
+    expect(names).toContain("Carol");
+  });
+
+  it("admin sees hidden=true tag on showName=false attendees", async () => {
+    await createOrUpdateRsvp(db, "u1", "e1", "Base", true);
+    await createOrUpdateRsvp(db, "u2", "e1", "Flyer", false);
+
+    const detail = await getEventDetail(db, "e1", "u-admin", true);
+    const bob = detail!.visibleAttendees.find((a) => a.name === "Bob");
+    expect(bob).toEqual({ name: "Bob", role: "Flyer", hidden: true });
+    const alice = detail!.visibleAttendees.find((a) => a.name === "Alice");
+    expect(alice).toEqual({ name: "Alice", role: "Base", hidden: false });
+  });
+
   it("never exposes email addresses in event detail", async () => {
     await createOrUpdateRsvp(db, "u1", "e1", "Base", true);
 
@@ -68,6 +106,18 @@ describe("event detail visibility rules", () => {
     const json = JSON.stringify(detail);
     expect(json).not.toContain("alice@test.com");
     expect(json).not.toContain("bob@test.com");
+    expect(json).not.toContain("email");
+  });
+
+  it("never exposes email addresses even for admin", async () => {
+    await createOrUpdateRsvp(db, "u1", "e1", "Base", true);
+    await createOrUpdateRsvp(db, "u2", "e1", "Flyer", false);
+
+    const detail = await getEventDetail(db, "e1", "u-admin", true);
+    const json = JSON.stringify(detail);
+    expect(json).not.toContain("alice@test.com");
+    expect(json).not.toContain("bob@test.com");
+    expect(json).not.toContain("dan@test.com");
     expect(json).not.toContain("email");
   });
 
