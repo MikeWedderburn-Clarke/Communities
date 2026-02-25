@@ -1,0 +1,132 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { ROLES, type Role } from "@/types";
+
+interface Props {
+  eventId: string;
+  currentRsvp: { role: Role; showName: boolean } | null;
+}
+
+export function RsvpForm({ eventId, currentRsvp }: Props) {
+  const router = useRouter();
+  const [role, setRole] = useState<Role>(currentRsvp?.role ?? "Base");
+  const [showName, setShowName] = useState(currentRsvp?.showName ?? true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+
+    const res = await fetch("/api/rsvp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eventId, role, showName }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Something went wrong");
+      setSubmitting(false);
+      return;
+    }
+
+    router.refresh();
+    setSubmitting(false);
+  }
+
+  async function handleCancel() {
+    setSubmitting(true);
+    setError(null);
+
+    const res = await fetch("/api/rsvp", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eventId }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Something went wrong");
+      setSubmitting(false);
+      return;
+    }
+
+    router.refresh();
+    setSubmitting(false);
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-3 space-y-4">
+      <fieldset>
+        <legend className="text-sm font-medium text-gray-700">
+          Your role
+        </legend>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {ROLES.map((r) => (
+            <label
+              key={r}
+              className={`cursor-pointer rounded-full border px-3 py-1 text-sm transition ${
+                role === r
+                  ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                  : "border-gray-200 hover:border-gray-300"
+              }`}
+            >
+              <input
+                type="radio"
+                name="role"
+                value={r}
+                checked={role === r}
+                onChange={() => setRole(r)}
+                className="sr-only"
+              />
+              {r}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={showName}
+          onChange={(e) => setShowName(e.target.checked)}
+          className="rounded border-gray-300"
+        />
+        Show my name publicly
+      </label>
+
+      {error && (
+        <p className="text-sm text-red-600">{error}</p>
+      )}
+
+      <div className="flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={submitting}
+          className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:opacity-50"
+        >
+          {submitting
+            ? "Saving..."
+            : currentRsvp
+              ? "Update RSVP"
+              : "RSVP"}
+        </button>
+
+        {currentRsvp && (
+          <button
+            type="button"
+            onClick={handleCancel}
+            disabled={submitting}
+            className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancel RSVP
+          </button>
+        )}
+      </div>
+    </form>
+  );
+}
