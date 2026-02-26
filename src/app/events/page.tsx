@@ -2,18 +2,22 @@ import { Suspense } from "react";
 import { Header } from "@/components/header";
 import { EventsContent } from "./events-content";
 import { getAllEvents } from "@/services/events";
+import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
 
 export const dynamic = "force-dynamic";
 
 interface Props {
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{ view?: string; city?: string }>;
 }
 
 export default async function EventsPage({ searchParams }: Props) {
-  const { view } = await searchParams;
+  const { view, city } = await searchParams;
   const events = await getAllEvents(db);
+  const user = await getCurrentUser();
   const initialView = view === "map" ? "map" : "list";
+  // Use city from query param, fall back to user's home city
+  const defaultCity = city ?? user?.homeCity ?? null;
 
   return (
     <>
@@ -25,7 +29,11 @@ export default async function EventsPage({ searchParams }: Props) {
         </p>
 
         <Suspense fallback={<p className="mt-8 text-gray-400">Loading...</p>}>
-          <EventsContent events={events} initialView={initialView} />
+          <EventsContent
+            events={events}
+            initialView={initialView}
+            defaultCity={defaultCity}
+          />
         </Suspense>
       </main>
     </>

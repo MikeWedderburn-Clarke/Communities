@@ -47,6 +47,8 @@ describe("getUserProfile", () => {
       teacherRequestedAt: null,
       defaultRole: "Base",
       defaultShowName: true,
+      homeCity: null,
+      useCurrentLocation: false,
       facebookUrl: "https://facebook.com/alice",
       instagramUrl: "https://instagram.com/alice",
       websiteUrl: "https://alice.dev",

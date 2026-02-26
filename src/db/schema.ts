@@ -20,6 +20,9 @@ export const users = sqliteTable("users", {
   showInstagram: integer("show_instagram", { mode: "boolean" }).notNull().default(false),
   showWebsite: integer("show_website", { mode: "boolean" }).notNull().default(false),
   showYoutube: integer("show_youtube", { mode: "boolean" }).notNull().default(false),
+  // Home city
+  homeCity: text("home_city"),
+  useCurrentLocation: integer("use_current_location", { mode: "boolean" }).notNull().default(false),
 });
 
 export const locations = sqliteTable("locations", {

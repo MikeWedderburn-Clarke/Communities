@@ -25,7 +25,9 @@ sqlite.exec(`
     show_facebook INTEGER NOT NULL DEFAULT 0,
     show_instagram INTEGER NOT NULL DEFAULT 0,
     show_website INTEGER NOT NULL DEFAULT 0,
-    show_youtube INTEGER NOT NULL DEFAULT 0
+    show_youtube INTEGER NOT NULL DEFAULT 0,
+    home_city TEXT,
+    use_current_location INTEGER NOT NULL DEFAULT 0
   );
   CREATE TABLE IF NOT EXISTS locations (
     id TEXT PRIMARY KEY,
@@ -102,24 +104,34 @@ const insertUser = sqlite.prepare(
   `INSERT OR IGNORE INTO users
    (id, name, email, is_admin, is_teacher_approved, teacher_requested_at, teacher_approved_by,
     default_role, default_show_name, facebook_url, instagram_url, website_url, youtube_url,
-    show_facebook, show_instagram, show_website, show_youtube)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    show_facebook, show_instagram, show_website, show_youtube, home_city, use_current_location)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 );
 for (const u of seedUsers) {
   insertUser.run(
     u.id, u.name, u.email, u.isAdmin, u.isTeacherApproved, u.teacherRequestedAt, u.teacherApprovedBy,
     u.defaultRole, u.defaultShowName, u.facebookUrl, u.instagramUrl, u.websiteUrl, u.youtubeUrl,
-    u.showFacebook, u.showInstagram, u.showWebsite, u.showYoutube
+    u.showFacebook, u.showInstagram, u.showWebsite, u.showYoutube, null, 0
   );
 }
 
-// ── Seed locations (London venues) ─────────────────────────────────
+// ── Seed locations (London + New York + Bristol + Bournemouth) ──────
 const seedLocations = [
   { id: "loc-regents-park", name: "Regent's Park", city: "London", country: "United Kingdom", latitude: 51.5273, longitude: -0.1535 },
   { id: "loc-gym-brixton", name: "The Gym Group Brixton", city: "London", country: "United Kingdom", latitude: 51.4613, longitude: -0.1150 },
   { id: "loc-colombo", name: "Colombo Centre, Elephant & Castle", city: "London", country: "United Kingdom", latitude: 51.4946, longitude: -0.1008 },
   { id: "loc-laban", name: "Laban Dance Centre, Greenwich", city: "London", country: "United Kingdom", latitude: 51.4741, longitude: -0.0143 },
   { id: "loc-victoria-park", name: "Victoria Park, Hackney", city: "London", country: "United Kingdom", latitude: 51.5368, longitude: -0.0396 },
+  // New York
+  { id: "loc-central-park", name: "Central Park Great Lawn", city: "New York", country: "United States", latitude: 40.7812, longitude: -73.9665 },
+  { id: "loc-prospect-park", name: "Prospect Park Long Meadow", city: "New York", country: "United States", latitude: 40.6602, longitude: -73.9690 },
+  { id: "loc-domino-park", name: "Domino Park, Williamsburg", city: "New York", country: "United States", latitude: 40.7135, longitude: -73.9683 },
+  // Bristol
+  { id: "loc-castle-park", name: "Castle Park", city: "Bristol", country: "United Kingdom", latitude: 51.4530, longitude: -2.5900 },
+  { id: "loc-the-motion", name: "The Motion", city: "Bristol", country: "United Kingdom", latitude: 51.4490, longitude: -2.5830 },
+  // Bournemouth
+  { id: "loc-boscombe-beach", name: "Boscombe Beach", city: "Bournemouth", country: "United Kingdom", latitude: 50.7198, longitude: -1.8400 },
+  { id: "loc-shelley-park", name: "Shelley Park", city: "Bournemouth", country: "United Kingdom", latitude: 50.7220, longitude: -1.8530 },
 ];
 
 const insertLocation = sqlite.prepare(
@@ -175,6 +187,99 @@ const seedEvents = [
     dateTime: "2026-04-05T12:00:00Z",
     endDateTime: "2026-04-05T16:00:00Z",
     locationId: "loc-victoria-park",
+  },
+  // ── New York events (5) ──────────────────────────────────────────
+  {
+    id: "evt-ny-central-park-jam",
+    title: "Central Park AcroYoga Jam",
+    description:
+      "Weekly open jam on the Great Lawn. All levels, bring a mat. We'll be near the Delacorte Theater.",
+    dateTime: "2026-03-15T14:00:00Z",
+    endDateTime: "2026-03-15T17:00:00Z",
+    locationId: "loc-central-park",
+  },
+  {
+    id: "evt-ny-beginner-intro",
+    title: "NYC Beginner Intro to AcroYoga",
+    description:
+      "First time? Perfect. Learn bird, throne, and basic safety. Partners rotated throughout. No experience needed.",
+    dateTime: "2026-03-22T11:00:00Z",
+    endDateTime: "2026-03-22T13:00:00Z",
+    locationId: "loc-central-park",
+  },
+  {
+    id: "evt-ny-prospect-flow",
+    title: "Prospect Park Flow Session",
+    description:
+      "Intermediate flow practice — washing machines, whips, and pops. Meet at the Long Meadow south entrance.",
+    dateTime: "2026-03-29T10:00:00Z",
+    endDateTime: "2026-03-29T12:30:00Z",
+    locationId: "loc-prospect-park",
+  },
+  {
+    id: "evt-ny-domino-sunset",
+    title: "Sunset Acro at Domino Park",
+    description:
+      "Evening session with Manhattan skyline views. Standing acro and L-basing. Intermediate level.",
+    dateTime: "2026-04-04T17:30:00Z",
+    endDateTime: "2026-04-04T20:00:00Z",
+    locationId: "loc-domino-park",
+  },
+  {
+    id: "evt-ny-spring-festival",
+    title: "NYC Spring AcroYoga Festival",
+    description:
+      "All-day festival with workshops, jams, and performances. Multiple teachers. All levels welcome!",
+    dateTime: "2026-04-12T10:00:00Z",
+    endDateTime: "2026-04-12T18:00:00Z",
+    locationId: "loc-prospect-park",
+  },
+  // ── Bristol events (3) ───────────────────────────────────────────
+  {
+    id: "evt-bristol-castle-jam",
+    title: "Bristol Castle Park Jam",
+    description:
+      "Friendly open jam in Castle Park. All levels, just bring a mat and a smile.",
+    dateTime: "2026-03-16T11:00:00Z",
+    endDateTime: "2026-03-16T14:00:00Z",
+    locationId: "loc-castle-park",
+  },
+  {
+    id: "evt-bristol-motion-workshop",
+    title: "Bristol Intermediate Workshop",
+    description:
+      "Two-hour workshop at The Motion covering intermediate flows, pops, and icarian. Some experience recommended.",
+    dateTime: "2026-03-23T14:00:00Z",
+    endDateTime: "2026-03-23T16:00:00Z",
+    locationId: "loc-the-motion",
+  },
+  {
+    id: "evt-bristol-spring-jam",
+    title: "Bristol Spring Outdoor Jam",
+    description:
+      "Welcoming the spring sunshine with an outdoor session. Beginners corner available. Bring snacks to share!",
+    dateTime: "2026-04-06T12:00:00Z",
+    endDateTime: "2026-04-06T15:00:00Z",
+    locationId: "loc-castle-park",
+  },
+  // ── Bournemouth events (2) ───────────────────────────────────────
+  {
+    id: "evt-bournemouth-beach-acro",
+    title: "Boscombe Beach AcroYoga",
+    description:
+      "AcroYoga on the sand! Soft landing guaranteed. All levels. Meet by the pier at 10am.",
+    dateTime: "2026-03-21T10:00:00Z",
+    endDateTime: "2026-03-21T13:00:00Z",
+    locationId: "loc-boscombe-beach",
+  },
+  {
+    id: "evt-bournemouth-park-session",
+    title: "Shelley Park Sunday Session",
+    description:
+      "Relaxed Sunday practice in Shelley Park. Bring a mat, water, and sunscreen. All abilities welcome.",
+    dateTime: "2026-04-13T11:00:00Z",
+    endDateTime: "2026-04-13T14:00:00Z",
+    locationId: "loc-shelley-park",
   },
 ];
 

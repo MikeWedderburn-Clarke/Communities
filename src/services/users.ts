@@ -31,6 +31,8 @@ export async function getUserProfile(db: Db, userId: string): Promise<UserProfil
     showInstagram: user.showInstagram,
     showWebsite: user.showWebsite,
     showYoutube: user.showYoutube,
+    homeCity: user.homeCity ?? null,
+    useCurrentLocation: user.useCurrentLocation,
   };
 }
 
@@ -64,6 +66,8 @@ interface ProfileUpdateData {
   showInstagram: boolean;
   showWebsite: boolean;
   showYoutube: boolean;
+  homeCity: string | null;
+  useCurrentLocation: boolean;
 }
 
 export async function updateUserProfile(db: Db, userId: string, data: ProfileUpdateData): Promise<void> {
@@ -80,6 +84,8 @@ export async function updateUserProfile(db: Db, userId: string, data: ProfileUpd
       showInstagram: data.showInstagram,
       showWebsite: data.showWebsite,
       showYoutube: data.showYoutube,
+      homeCity: data.homeCity,
+      useCurrentLocation: data.useCurrentLocation,
     })
     .where(eq(schema.users.id, userId));
 }
@@ -151,6 +157,28 @@ export function validateProfileInput(
 
   if (errors.length > 0) return { valid: false, errors };
 
+  // homeCity: optional string or null
+  let homeCity: string | null = null;
+  if (obj.homeCity !== undefined && obj.homeCity !== null && obj.homeCity !== "") {
+    if (typeof obj.homeCity !== "string") {
+      errors.push({ field: "homeCity", message: "Must be a string" });
+    } else {
+      homeCity = (obj.homeCity as string).trim();
+    }
+  }
+
+  // useCurrentLocation: optional boolean, default false
+  let useCurrentLocation = false;
+  if (obj.useCurrentLocation !== undefined) {
+    if (typeof obj.useCurrentLocation !== "boolean") {
+      errors.push({ field: "useCurrentLocation", message: "Must be a boolean" });
+    } else {
+      useCurrentLocation = obj.useCurrentLocation;
+    }
+  }
+
+  if (errors.length > 0) return { valid: false, errors };
+
   return {
     valid: true,
     data: {
@@ -164,6 +192,8 @@ export function validateProfileInput(
       showInstagram: shows.showInstagram ?? false,
       showWebsite: shows.showWebsite ?? false,
       showYoutube: shows.showYoutube ?? false,
+      homeCity,
+      useCurrentLocation,
     },
   };
 }

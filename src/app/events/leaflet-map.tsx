@@ -47,6 +47,7 @@ function venueIcon(eventCount: number) {
 
 interface Props {
   events: EventSummary[];
+  homeCity?: string | null;
 }
 
 interface VenueMarkerData {
@@ -59,7 +60,7 @@ interface VenueMarkerData {
   events: EventSummary[];
 }
 
-export function LeafletMap({ events }: Props) {
+export function LeafletMap({ events, homeCity }: Props) {
   const venues = useMemo(() => {
     const map = new Map<string, VenueMarkerData>();
     for (const event of events) {
@@ -82,14 +83,21 @@ export function LeafletMap({ events }: Props) {
     return Array.from(map.values());
   }, [events]);
 
+  // If homeCity matches any venues, center on those; otherwise center on all
+  const homeCityVenues = homeCity
+    ? venues.filter((v) => v.city === homeCity)
+    : [];
+  const centerVenues = homeCityVenues.length > 0 ? homeCityVenues : venues;
+
   const defaultCenter: [number, number] =
-    venues.length > 0
+    centerVenues.length > 0
       ? [
-          venues.reduce((s, v) => s + v.lat, 0) / venues.length,
-          venues.reduce((s, v) => s + v.lng, 0) / venues.length,
+          centerVenues.reduce((s, v) => s + v.lat, 0) / centerVenues.length,
+          centerVenues.reduce((s, v) => s + v.lng, 0) / centerVenues.length,
         ]
       : [20, 0];
-  const defaultZoom = venues.length > 0 ? 11 : 2;
+  const defaultZoom =
+    centerVenues.length > 0 ? (homeCityVenues.length > 0 ? 13 : 11) : 2;
 
   return (
     <div className="mt-6">

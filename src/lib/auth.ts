@@ -37,6 +37,8 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     isTeacherApproved: user.isTeacherApproved,
     defaultRole: (user.defaultRole as SessionUser["defaultRole"]) ?? null,
     defaultShowName: user.defaultShowName ?? null,
+    homeCity: user.homeCity ?? null,
+    useCurrentLocation: user.useCurrentLocation,
   };
 }
 
@@ -68,5 +70,7 @@ export async function getMockUsers(): Promise<SessionUser[]> {
     isTeacherApproved: u.isTeacherApproved,
     defaultRole: (u.defaultRole as SessionUser["defaultRole"]) ?? null,
     defaultShowName: u.defaultShowName ?? null,
+    homeCity: u.homeCity ?? null,
+    useCurrentLocation: u.useCurrentLocation,
   }));
 }

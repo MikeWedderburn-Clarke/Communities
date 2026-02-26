@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { ROLES, type Role, type UserProfile } from "@/types";
 
@@ -25,6 +25,11 @@ export function ProfileForm({ profile }: Props) {
   const [showWebsite, setShowWebsite] = useState(profile.showWebsite);
   const [showYoutube, setShowYoutube] = useState(profile.showYoutube);
 
+  // Home city
+  const [homeCity, setHomeCity] = useState(profile.homeCity ?? "");
+  const [useCurrentLocation, setUseCurrentLocation] = useState(profile.useCurrentLocation);
+  const [geoStatus, setGeoStatus] = useState<string | null>(null);
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -32,6 +37,54 @@ export function ProfileForm({ profile }: Props) {
   // Teacher request state
   const [requestingTeacher, setRequestingTeacher] = useState(false);
   const [teacherError, setTeacherError] = useState<string | null>(null);
+
+  /** Reverse geocode coords to city name via Nominatim. */
+  const detectCity = useCallback(async () => {
+    if (!navigator.geolocation) {
+      setGeoStatus("Geolocation not supported");
+      return;
+    }
+    setGeoStatus("Detecting location…");
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`,
+            { headers: { "User-Agent": "AcroYogaCommunities/1.0" } },
+          );
+          const data = await res.json();
+          const city =
+            data.address?.city ??
+            data.address?.town ??
+            data.address?.village ??
+            "";
+          if (city) {
+            setHomeCity(city);
+            setGeoStatus(`Detected: ${city}`);
+          } else {
+            setGeoStatus("Could not determine city from location");
+          }
+        } catch {
+          setGeoStatus("Geocoding failed");
+        }
+      },
+      (err) => {
+        setGeoStatus(
+          err.code === err.PERMISSION_DENIED
+            ? "Location permission denied"
+            : "Could not get location",
+        );
+      },
+      { enableHighAccuracy: false, timeout: 10000 },
+    );
+  }, []);
+
+  // Auto-detect on load if "use current location" is enabled
+  useEffect(() => {
+    if (useCurrentLocation) {
+      detectCity();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -54,6 +107,8 @@ export function ProfileForm({ profile }: Props) {
           showInstagram,
           showWebsite,
           showYoutube,
+          homeCity: homeCity || null,
+          useCurrentLocation,
         }),
       });
 
@@ -175,7 +230,62 @@ export function ProfileForm({ profile }: Props) {
         </div>
       </section>
 
-      {/* Section 2: Social Links */}
+      {/* Section 2: Home City */}
+      <section className="rounded-lg border border-gray-200 bg-white p-5">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+          Home City
+        </h2>
+        <p className="mt-1 text-sm text-gray-500">
+          Events will default to showing your home city first.
+        </p>
+
+        <div className="mt-4">
+          <label htmlFor="homeCity" className="block text-sm font-medium text-gray-700">
+            City
+          </label>
+          <input
+            id="homeCity"
+            type="text"
+            value={homeCity}
+            onChange={(e) => setHomeCity(e.target.value)}
+            placeholder="e.g. London, New York, Bristol"
+            className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+          />
+        </div>
+
+        <div className="mt-4 space-y-2">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={useCurrentLocation}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setUseCurrentLocation(checked);
+                if (checked) detectCity();
+              }}
+              className="rounded border-gray-300"
+            />
+            Use my current location
+          </label>
+          <p className="text-xs text-gray-400">
+            When enabled, your home city updates automatically each time you visit your profile.
+          </p>
+          {geoStatus && (
+            <p className="text-xs text-gray-500">{geoStatus}</p>
+          )}
+          {!useCurrentLocation && (
+            <button
+              type="button"
+              onClick={detectCity}
+              className="text-sm text-indigo-600 hover:underline"
+            >
+              Detect my city now
+            </button>
+          )}
+        </div>
+      </section>
+
+      {/* Section 3: Social Links */}
       <section className="rounded-lg border border-gray-200 bg-white p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
           Social Links
@@ -217,7 +327,7 @@ export function ProfileForm({ profile }: Props) {
         </div>
       </section>
 
-      {/* Section 3: Teacher Status */}
+      {/* Section 4: Teacher Status */}
       <section className="rounded-lg border border-gray-200 bg-white p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
           Teacher Status

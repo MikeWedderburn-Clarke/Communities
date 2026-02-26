@@ -30,7 +30,9 @@ export function createTestDb() {
       show_facebook INTEGER NOT NULL DEFAULT 0,
       show_instagram INTEGER NOT NULL DEFAULT 0,
       show_website INTEGER NOT NULL DEFAULT 0,
-      show_youtube INTEGER NOT NULL DEFAULT 0
+      show_youtube INTEGER NOT NULL DEFAULT 0,
+      home_city TEXT,
+      use_current_location INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE locations (
       id TEXT PRIMARY KEY,

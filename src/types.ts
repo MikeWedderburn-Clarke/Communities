@@ -69,6 +69,8 @@ export interface SessionUser {
   isTeacherApproved: boolean;
   defaultRole: Role | null;
   defaultShowName: boolean | null;
+  homeCity: string | null;
+  useCurrentLocation: boolean;
 }
 
 /** Full profile for the user's own editing page. */
@@ -88,6 +90,8 @@ export interface UserProfile {
   showInstagram: boolean;
   showWebsite: boolean;
   showYoutube: boolean;
+  homeCity: string | null;
+  useCurrentLocation: boolean;
 }
 
 /** Public profile visible to other logged-in users—only includes links the owner made visible. */
