@@ -66,68 +66,100 @@ export function visibleAttendees(
 
 // ── Event queries ──────────────────────────────────────────────────
 
-/** Resolve the location object for an event by joining the locations table. */
-async function getEventLocation(db: Db, locationId: string): Promise<Location> {
-  const [loc] = await db
-    .select()
-    .from(schema.locations)
-    .where(eq(schema.locations.id, locationId))
-    .limit(1);
+type EventListRow = {
+  eventId: string;
+  title: string;
+  description: string;
+  dateTime: string;
+  endDateTime: string;
+  locationId: string;
+  locationName: string;
+  locationCity: string;
+  locationCountry: string;
+  locationLat: number;
+  locationLon: number;
+  rsvpRole: string | null;
+  rsvpIsTeaching: boolean | null;
+};
 
-  if (!loc) {
-    return { id: locationId, name: "Unknown", city: "Unknown", country: "Unknown", latitude: 0, longitude: 0 };
+/**
+ * Groups flat rows from a single events+locations LEFT JOIN rsvps query
+ * into EventSummary objects.  Events with no RSVPs produce one row with
+ * null rsvp columns; those are counted correctly (zero attendees).
+ * Row order from the DB (by dateTime) is preserved via Map insertion order.
+ */
+function groupEventRows(rows: EventListRow[]): EventSummary[] {
+  const map = new Map<string, EventSummary>();
+  for (const row of rows) {
+    if (!map.has(row.eventId)) {
+      map.set(row.eventId, {
+        id: row.eventId,
+        title: row.title,
+        description: row.description,
+        dateTime: row.dateTime,
+        endDateTime: row.endDateTime,
+        location: {
+          id: row.locationId,
+          name: row.locationName,
+          city: row.locationCity,
+          country: row.locationCountry,
+          latitude: row.locationLat,
+          longitude: row.locationLon,
+        },
+        attendeeCount: 0,
+        roleCounts: { Base: 0, Flyer: 0, Hybrid: 0 },
+        teacherCount: 0,
+      });
+    }
+    if (row.rsvpRole !== null) {
+      const summary = map.get(row.eventId)!;
+      summary.attendeeCount++;
+      if (row.rsvpRole in summary.roleCounts) {
+        summary.roleCounts[row.rsvpRole as Role]++;
+      }
+      if (row.rsvpIsTeaching) summary.teacherCount++;
+    }
   }
-
-  return {
-    id: loc.id,
-    name: loc.name,
-    city: loc.city,
-    country: loc.country,
-    latitude: loc.latitude,
-    longitude: loc.longitude,
-  };
+  return Array.from(map.values());
 }
 
-async function buildEventSummary(db: Db, event: typeof schema.events.$inferSelect): Promise<EventSummary> {
-  const eventRsvps = await db
-    .select({ role: schema.rsvps.role, isTeaching: schema.rsvps.isTeaching })
-    .from(schema.rsvps)
-    .where(eq(schema.rsvps.eventId, event.id));
-
-  const location = await getEventLocation(db, event.locationId);
-
-  return {
-    id: event.id,
-    title: event.title,
-    description: event.description,
-    dateTime: event.dateTime,
-    endDateTime: event.endDateTime,
-    location,
-    attendeeCount: eventRsvps.length,
-    roleCounts: aggregateRoles(eventRsvps),
-    teacherCount: eventRsvps.filter((r) => r.isTeaching).length,
-  };
-}
+const EVENT_LIST_SELECT = (s: typeof schema) => ({
+  eventId: s.events.id,
+  title: s.events.title,
+  description: s.events.description,
+  dateTime: s.events.dateTime,
+  endDateTime: s.events.endDateTime,
+  locationId: s.locations.id,
+  locationName: s.locations.name,
+  locationCity: s.locations.city,
+  locationCountry: s.locations.country,
+  locationLat: s.locations.latitude,
+  locationLon: s.locations.longitude,
+  rsvpRole: s.rsvps.role,
+  rsvpIsTeaching: s.rsvps.isTeaching,
+});
 
 export async function getUpcomingEvents(db: Db): Promise<EventSummary[]> {
   const now = new Date().toISOString();
   const rows = await db
-    .select()
+    .select(EVENT_LIST_SELECT(schema))
     .from(schema.events)
+    .innerJoin(schema.locations, eq(schema.events.locationId, schema.locations.id))
+    .leftJoin(schema.rsvps, eq(schema.rsvps.eventId, schema.events.id))
     .where(and(gte(schema.events.dateTime, now), eq(schema.events.status, "approved")))
     .orderBy(schema.events.dateTime);
-
-  return Promise.all(rows.map((event) => buildEventSummary(db, event)));
+  return groupEventRows(rows);
 }
 
 export async function getAllEvents(db: Db): Promise<EventSummary[]> {
   const rows = await db
-    .select()
+    .select(EVENT_LIST_SELECT(schema))
     .from(schema.events)
+    .innerJoin(schema.locations, eq(schema.events.locationId, schema.locations.id))
+    .leftJoin(schema.rsvps, eq(schema.rsvps.eventId, schema.events.id))
     .where(eq(schema.events.status, "approved"))
     .orderBy(schema.events.dateTime);
-
-  return Promise.all(rows.map((event) => buildEventSummary(db, event)));
+  return groupEventRows(rows);
 }
 
 export async function getEventDetail(
@@ -136,15 +168,37 @@ export async function getEventDetail(
   currentUserId: string | null,
   isAdmin: boolean = false
 ): Promise<EventDetail | null> {
-  const [event] = await db
-    .select()
+  // Fetch event + location in a single JOIN rather than two round-trips.
+  const [eventRow] = await db
+    .select({
+      id: schema.events.id,
+      title: schema.events.title,
+      description: schema.events.description,
+      dateTime: schema.events.dateTime,
+      endDateTime: schema.events.endDateTime,
+      status: schema.events.status,
+      locationId: schema.locations.id,
+      locationName: schema.locations.name,
+      locationCity: schema.locations.city,
+      locationCountry: schema.locations.country,
+      locationLat: schema.locations.latitude,
+      locationLon: schema.locations.longitude,
+    })
     .from(schema.events)
+    .innerJoin(schema.locations, eq(schema.events.locationId, schema.locations.id))
     .where(eq(schema.events.id, eventId))
     .limit(1);
 
-  if (!event) return null;
+  if (!eventRow) return null;
 
-  const location = await getEventLocation(db, event.locationId);
+  const location: Location = {
+    id: eventRow.locationId,
+    name: eventRow.locationName,
+    city: eventRow.locationCity,
+    country: eventRow.locationCountry,
+    latitude: eventRow.locationLat,
+    longitude: eventRow.locationLon,
+  };
 
   const rsvpRows = await db
     .select({
@@ -183,11 +237,11 @@ export async function getEventDetail(
   }
 
   return {
-    id: event.id,
-    title: event.title,
-    description: event.description,
-    dateTime: event.dateTime,
-    endDateTime: event.endDateTime,
+    id: eventRow.id,
+    title: eventRow.title,
+    description: eventRow.description,
+    dateTime: eventRow.dateTime,
+    endDateTime: eventRow.endDateTime,
     location,
     attendeeCount: rsvpRows.length,
     roleCounts,
@@ -205,23 +259,14 @@ export async function createOrUpdateRsvp(
   showName: boolean,
   isTeaching: boolean = false
 ): Promise<void> {
-  // Check if user already has an RSVP for this event
-  const [existing] = await db
-    .select()
-    .from(schema.rsvps)
-    .where(
-      and(eq(schema.rsvps.eventId, eventId), eq(schema.rsvps.userId, userId))
-    )
-    .limit(1);
-
-  if (existing) {
-    await db
-      .update(schema.rsvps)
-      .set({ role, showName, isTeaching })
-      .where(eq(schema.rsvps.id, existing.id));
-  } else {
-    await db.insert(schema.rsvps).values({ eventId, userId, role, showName, isTeaching });
-  }
+  // Single upsert instead of SELECT + INSERT/UPDATE
+  await db
+    .insert(schema.rsvps)
+    .values({ eventId, userId, role, showName, isTeaching })
+    .onConflictDoUpdate({
+      target: [schema.rsvps.eventId, schema.rsvps.userId],
+      set: { role, showName, isTeaching },
+    });
 }
 
 export async function deleteRsvp(

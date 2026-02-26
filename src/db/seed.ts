@@ -58,6 +58,7 @@ sqlite.exec(`
     is_teaching INTEGER NOT NULL DEFAULT 0
   );
   CREATE UNIQUE INDEX IF NOT EXISTS rsvps_event_user_unique ON rsvps(event_id, user_id);
+  CREATE INDEX IF NOT EXISTS events_status_datetime_idx ON events(status, date_time);
 `);
 
 // ── Seed users (mock auth accounts) ────────────────────────────────

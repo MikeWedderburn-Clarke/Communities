@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, uniqueIndex, index } from "drizzle-orm/sqlite-core";
 
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
@@ -48,7 +48,11 @@ export const events = sqliteTable("events", {
     .references(() => locations.id),
   status: text("status", { enum: ["approved", "pending", "rejected"] }).notNull().default("pending"),
   createdBy: text("created_by").references(() => users.id),
-});
+}, (table) => ([
+  // Composite index covering the WHERE status='approved' + ORDER BY date_time
+  // used by getAllEvents / getUpcomingEvents on every page load.
+  index("events_status_datetime_idx").on(table.status, table.dateTime),
+]));
 
 export const rsvps = sqliteTable("rsvps", {
   id: integer("id").primaryKey({ autoIncrement: true }),

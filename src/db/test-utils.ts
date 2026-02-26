@@ -63,6 +63,7 @@ export function createTestDb() {
       is_teaching INTEGER NOT NULL DEFAULT 0
     );
     CREATE UNIQUE INDEX rsvps_event_user_unique ON rsvps(event_id, user_id);
+    CREATE INDEX events_status_datetime_idx ON events(status, date_time);
   `);
 
   return testDb;

@@ -7,8 +7,10 @@ export async function Header() {
   const user = await getCurrentUser();
   let pendingCount = 0;
   if (user?.isAdmin) {
-    const pendingTeachers = await getPendingTeacherRequests(db);
-    const pendingEvts = await getPendingEvents(db);
+    const [pendingTeachers, pendingEvts] = await Promise.all([
+      getPendingTeacherRequests(db),
+      getPendingEvents(db),
+    ]);
     pendingCount = pendingTeachers.length + pendingEvts.length;
   }
 
