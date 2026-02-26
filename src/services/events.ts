@@ -1,7 +1,7 @@
 import { eq, and, gte, isNotNull } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "@/db/schema";
-import type { EventSummary, EventDetail, RoleCounts, Role, TeacherRequest } from "@/types";
+import type { EventSummary, EventDetail, RoleCounts, Role, TeacherRequest, PendingEvent, EventStatus, CreateEventInput, Location } from "@/types";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -66,11 +66,35 @@ export function visibleAttendees(
 
 // ── Event queries ──────────────────────────────────────────────────
 
+/** Resolve the location object for an event by joining the locations table. */
+async function getEventLocation(db: Db, locationId: string): Promise<Location> {
+  const [loc] = await db
+    .select()
+    .from(schema.locations)
+    .where(eq(schema.locations.id, locationId))
+    .limit(1);
+
+  if (!loc) {
+    return { id: locationId, name: "Unknown", city: "Unknown", country: "Unknown", latitude: 0, longitude: 0 };
+  }
+
+  return {
+    id: loc.id,
+    name: loc.name,
+    city: loc.city,
+    country: loc.country,
+    latitude: loc.latitude,
+    longitude: loc.longitude,
+  };
+}
+
 async function buildEventSummary(db: Db, event: typeof schema.events.$inferSelect): Promise<EventSummary> {
   const eventRsvps = await db
     .select({ role: schema.rsvps.role, isTeaching: schema.rsvps.isTeaching })
     .from(schema.rsvps)
     .where(eq(schema.rsvps.eventId, event.id));
+
+  const location = await getEventLocation(db, event.locationId);
 
   return {
     id: event.id,
@@ -78,9 +102,7 @@ async function buildEventSummary(db: Db, event: typeof schema.events.$inferSelec
     description: event.description,
     dateTime: event.dateTime,
     endDateTime: event.endDateTime,
-    location: event.location,
-    country: event.country,
-    city: event.city,
+    location,
     attendeeCount: eventRsvps.length,
     roleCounts: aggregateRoles(eventRsvps),
     teacherCount: eventRsvps.filter((r) => r.isTeaching).length,
@@ -92,7 +114,7 @@ export async function getUpcomingEvents(db: Db): Promise<EventSummary[]> {
   const rows = await db
     .select()
     .from(schema.events)
-    .where(gte(schema.events.dateTime, now))
+    .where(and(gte(schema.events.dateTime, now), eq(schema.events.status, "approved")))
     .orderBy(schema.events.dateTime);
 
   return Promise.all(rows.map((event) => buildEventSummary(db, event)));
@@ -102,6 +124,7 @@ export async function getAllEvents(db: Db): Promise<EventSummary[]> {
   const rows = await db
     .select()
     .from(schema.events)
+    .where(eq(schema.events.status, "approved"))
     .orderBy(schema.events.dateTime);
 
   return Promise.all(rows.map((event) => buildEventSummary(db, event)));
@@ -120,6 +143,8 @@ export async function getEventDetail(
     .limit(1);
 
   if (!event) return null;
+
+  const location = await getEventLocation(db, event.locationId);
 
   const rsvpRows = await db
     .select({
@@ -163,9 +188,7 @@ export async function getEventDetail(
     description: event.description,
     dateTime: event.dateTime,
     endDateTime: event.endDateTime,
-    location: event.location,
-    country: event.country,
-    city: event.city,
+    location,
     attendeeCount: rsvpRows.length,
     roleCounts,
     teacherCount: rsvpRows.filter((r) => r.isTeaching).length,
@@ -273,4 +296,60 @@ export async function denyTeacher(db: Db, userId: string): Promise<void> {
     .update(schema.users)
     .set({ teacherRequestedAt: null, isTeacherApproved: false, teacherApprovedBy: null })
     .where(eq(schema.users.id, userId));
+}
+
+// ── Event creation / approval ──────────────────────────────────────
+
+export async function createEvent(
+  db: Db,
+  input: CreateEventInput,
+  createdBy: string,
+  isAdmin: boolean
+): Promise<string> {
+  const id = `evt-${crypto.randomUUID()}`;
+  const status: EventStatus = isAdmin ? "approved" : "pending";
+  await db.insert(schema.events).values({
+    id,
+    title: input.title,
+    description: input.description,
+    dateTime: input.dateTime,
+    endDateTime: input.endDateTime,
+    locationId: input.locationId,
+    status,
+    createdBy,
+  });
+  return id;
+}
+
+export async function getPendingEvents(db: Db): Promise<PendingEvent[]> {
+  const rows = await db
+    .select({
+      id: schema.events.id,
+      title: schema.events.title,
+      dateTime: schema.events.dateTime,
+      locationName: schema.locations.name,
+      createdByName: schema.users.name,
+      createdByEmail: schema.users.email,
+    })
+    .from(schema.events)
+    .innerJoin(schema.users, eq(schema.events.createdBy, schema.users.id))
+    .innerJoin(schema.locations, eq(schema.events.locationId, schema.locations.id))
+    .where(eq(schema.events.status, "pending"))
+    .orderBy(schema.events.dateTime);
+
+  return rows;
+}
+
+export async function approveEvent(db: Db, eventId: string): Promise<void> {
+  await db
+    .update(schema.events)
+    .set({ status: "approved" })
+    .where(eq(schema.events.id, eventId));
+}
+
+export async function rejectEvent(db: Db, eventId: string): Promise<void> {
+  await db
+    .update(schema.events)
+    .set({ status: "rejected" })
+    .where(eq(schema.events.id, eventId));
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateRsvpInput } from "@/services/validation";
+import { validateRsvpInput, validateEventInput } from "@/services/validation";
 
 describe("validateRsvpInput", () => {
   it("accepts valid input", () => {
@@ -118,6 +118,104 @@ describe("validateRsvpInput", () => {
     expect(result.valid).toBe(false);
     if (!result.valid) {
       expect(result.errors.some((e) => e.field === "isTeaching")).toBe(true);
+    }
+  });
+});
+
+describe("validateEventInput", () => {
+  const validEvent = {
+    title: "Sunday Jam",
+    description: "A fun jam session",
+    dateTime: "2026-04-01T10:00:00Z",
+    endDateTime: "2026-04-01T12:00:00Z",
+    locationId: "loc-regents-park",
+  };
+
+  it("accepts valid input", () => {
+    const result = validateEventInput(validEvent);
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.title).toBe("Sunday Jam");
+    }
+  });
+
+  it("trims whitespace from all string fields", () => {
+    const result = validateEventInput({
+      ...validEvent,
+      title: "  Sunday Jam  ",
+      locationId: "  loc-regents-park  ",
+    });
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.title).toBe("Sunday Jam");
+      expect(result.data.locationId).toBe("loc-regents-park");
+    }
+  });
+
+  it("rejects missing title", () => {
+    const { title, ...rest } = validEvent;
+    const result = validateEventInput(rest);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "title")).toBe(true);
+    }
+  });
+
+  it("rejects empty description", () => {
+    const result = validateEventInput({ ...validEvent, description: "  " });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "description")).toBe(true);
+    }
+  });
+
+  it("rejects invalid dateTime", () => {
+    const result = validateEventInput({ ...validEvent, dateTime: "not-a-date" });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "dateTime")).toBe(true);
+    }
+  });
+
+  it("rejects endDateTime before dateTime", () => {
+    const result = validateEventInput({
+      ...validEvent,
+      dateTime: "2026-04-01T12:00:00Z",
+      endDateTime: "2026-04-01T10:00:00Z",
+    });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "endDateTime")).toBe(true);
+    }
+  });
+
+  it("rejects endDateTime equal to dateTime", () => {
+    const result = validateEventInput({
+      ...validEvent,
+      dateTime: "2026-04-01T10:00:00Z",
+      endDateTime: "2026-04-01T10:00:00Z",
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  it("rejects null body", () => {
+    const result = validateEventInput(null);
+    expect(result.valid).toBe(false);
+  });
+
+  it("rejects title over 200 characters", () => {
+    const result = validateEventInput({ ...validEvent, title: "x".repeat(201) });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "title")).toBe(true);
+    }
+  });
+
+  it("collects multiple errors at once", () => {
+    const result = validateEventInput({ title: "", description: "" });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.length).toBeGreaterThanOrEqual(2);
     }
   });
 });

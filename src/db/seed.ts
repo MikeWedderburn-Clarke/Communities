@@ -27,15 +27,25 @@ sqlite.exec(`
     show_website INTEGER NOT NULL DEFAULT 0,
     show_youtube INTEGER NOT NULL DEFAULT 0
   );
+  CREATE TABLE IF NOT EXISTS locations (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    city TEXT NOT NULL,
+    country TEXT NOT NULL,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    created_by TEXT REFERENCES users(id)
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS locations_name_city_country_unique ON locations(name, city, country);
   CREATE TABLE IF NOT EXISTS events (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     description TEXT NOT NULL,
     date_time TEXT NOT NULL,
     end_date_time TEXT NOT NULL,
-    location TEXT NOT NULL,
-    country TEXT NOT NULL,
-    city TEXT NOT NULL
+    location_id TEXT NOT NULL REFERENCES locations(id),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('approved','pending','rejected')),
+    created_by TEXT REFERENCES users(id)
   );
   CREATE TABLE IF NOT EXISTS rsvps (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,6 +55,7 @@ sqlite.exec(`
     show_name INTEGER NOT NULL DEFAULT 0,
     is_teaching INTEGER NOT NULL DEFAULT 0
   );
+  CREATE UNIQUE INDEX IF NOT EXISTS rsvps_event_user_unique ON rsvps(event_id, user_id);
 `);
 
 // ── Seed users (mock auth accounts) ────────────────────────────────
@@ -102,6 +113,22 @@ for (const u of seedUsers) {
   );
 }
 
+// ── Seed locations (London venues) ─────────────────────────────────
+const seedLocations = [
+  { id: "loc-regents-park", name: "Regent's Park", city: "London", country: "United Kingdom", latitude: 51.5273, longitude: -0.1535 },
+  { id: "loc-gym-brixton", name: "The Gym Group Brixton", city: "London", country: "United Kingdom", latitude: 51.4613, longitude: -0.1150 },
+  { id: "loc-colombo", name: "Colombo Centre, Elephant & Castle", city: "London", country: "United Kingdom", latitude: 51.4946, longitude: -0.1008 },
+  { id: "loc-laban", name: "Laban Dance Centre, Greenwich", city: "London", country: "United Kingdom", latitude: 51.4741, longitude: -0.0143 },
+  { id: "loc-victoria-park", name: "Victoria Park, Hackney", city: "London", country: "United Kingdom", latitude: 51.5368, longitude: -0.0396 },
+];
+
+const insertLocation = sqlite.prepare(
+  "INSERT OR IGNORE INTO locations (id, name, city, country, latitude, longitude, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)"
+);
+for (const l of seedLocations) {
+  insertLocation.run(l.id, l.name, l.city, l.country, l.latitude, l.longitude, "user-dan");
+}
+
 // ── Seed events (London AcroYoga) ──────────────────────────────────
 const seedEvents = [
   {
@@ -111,9 +138,7 @@ const seedEvents = [
       "Open-level jam in Regent's Park. Bring a mat and good vibes! All levels welcome.",
     dateTime: "2026-03-08T11:00:00Z",
     endDateTime: "2026-03-08T14:00:00Z",
-    location: "Regent's Park, London",
-    country: "United Kingdom",
-    city: "London",
+    locationId: "loc-regents-park",
   },
   {
     id: "evt-beginner-workshop",
@@ -122,9 +147,7 @@ const seedEvents = [
       "A 2-hour introduction to AcroYoga covering bird, throne, and basic washing machines. No partner required — we rotate throughout.",
     dateTime: "2026-03-14T10:00:00Z",
     endDateTime: "2026-03-14T12:00:00Z",
-    location: "The Gym Group Brixton, London",
-    country: "United Kingdom",
-    city: "London",
+    locationId: "loc-gym-brixton",
   },
   {
     id: "evt-flight-night",
@@ -133,9 +156,7 @@ const seedEvents = [
       "Weekly evening session focused on intermediate flows and standing acro. Warm-up included. Mats provided.",
     dateTime: "2026-03-20T18:30:00Z",
     endDateTime: "2026-03-20T21:00:00Z",
-    location: "Colombo Centre, Elephant & Castle, London",
-    country: "United Kingdom",
-    city: "London",
+    locationId: "loc-colombo",
   },
   {
     id: "evt-washing-machine",
@@ -144,9 +165,7 @@ const seedEvents = [
       "Deep dive into washing machine transitions — icarian, whip, and reverse flows. Intermediate level recommended.",
     dateTime: "2026-03-28T14:00:00Z",
     endDateTime: "2026-03-28T17:00:00Z",
-    location: "Laban Dance Centre, Greenwich, London",
-    country: "United Kingdom",
-    city: "London",
+    locationId: "loc-laban",
   },
   {
     id: "evt-park-jam-april",
@@ -155,17 +174,15 @@ const seedEvents = [
       "Celebrating the warmer weather with a big outdoor jam. All levels, family-friendly. We'll have a dedicated beginners' circle.",
     dateTime: "2026-04-05T12:00:00Z",
     endDateTime: "2026-04-05T16:00:00Z",
-    location: "Victoria Park, Hackney, London",
-    country: "United Kingdom",
-    city: "London",
+    locationId: "loc-victoria-park",
   },
 ];
 
 const insertEvent = sqlite.prepare(
-  "INSERT OR IGNORE INTO events (id, title, description, date_time, end_date_time, location, country, city) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  "INSERT OR IGNORE INTO events (id, title, description, date_time, end_date_time, location_id, status, created_by) VALUES (?, ?, ?, ?, ?, ?, 'approved', 'user-dan')"
 );
 for (const e of seedEvents) {
-  insertEvent.run(e.id, e.title, e.description, e.dateTime, e.endDateTime, e.location, e.country, e.city);
+  insertEvent.run(e.id, e.title, e.description, e.dateTime, e.endDateTime, e.locationId);
 }
 
 // ── Seed RSVPs ──────────────────────────────────────────────────────
@@ -188,5 +205,5 @@ for (const r of seedRsvps) {
   insertRsvp.run(r.eventId, r.userId, r.role, r.showName, r.isTeaching);
 }
 
-console.log("Seed complete: %d users, %d events, %d RSVPs", seedUsers.length, seedEvents.length, seedRsvps.length);
+console.log("Seed complete: %d users, %d locations, %d events, %d RSVPs", seedUsers.length, seedLocations.length, seedEvents.length, seedRsvps.length);
 sqlite.close();

@@ -25,7 +25,7 @@ export function EventsList({ events }: Props) {
                 <p className="mt-1 text-sm text-gray-600">
                   {formatDateTime(event.dateTime)}
                 </p>
-                <p className="text-sm text-gray-500">{event.location}</p>
+                <p className="text-sm text-gray-500">{event.location.name}, {event.location.city}</p>
               </div>
               <div className="shrink-0 text-right">
                 <span className="text-sm font-medium text-indigo-600">

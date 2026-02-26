@@ -32,15 +32,25 @@ export function createTestDb() {
       show_website INTEGER NOT NULL DEFAULT 0,
       show_youtube INTEGER NOT NULL DEFAULT 0
     );
+    CREATE TABLE locations (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      city TEXT NOT NULL,
+      country TEXT NOT NULL,
+      latitude REAL NOT NULL,
+      longitude REAL NOT NULL,
+      created_by TEXT REFERENCES users(id)
+    );
+    CREATE UNIQUE INDEX locations_name_city_country_unique ON locations(name, city, country);
     CREATE TABLE events (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       description TEXT NOT NULL,
       date_time TEXT NOT NULL,
       end_date_time TEXT NOT NULL,
-      location TEXT NOT NULL,
-      country TEXT NOT NULL,
-      city TEXT NOT NULL
+      location_id TEXT NOT NULL REFERENCES locations(id),
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('approved','pending','rejected')),
+      created_by TEXT REFERENCES users(id)
     );
     CREATE TABLE rsvps (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,6 +60,7 @@ export function createTestDb() {
       show_name INTEGER NOT NULL DEFAULT 0,
       is_teaching INTEGER NOT NULL DEFAULT 0
     );
+    CREATE UNIQUE INDEX rsvps_event_user_unique ON rsvps(event_id, user_id);
   `);
 
   return testDb;

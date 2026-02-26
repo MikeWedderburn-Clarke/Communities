@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
-import { getPendingTeacherRequests } from "@/services/events";
+import { getPendingTeacherRequests, getPendingEvents } from "@/services/events";
 import { db } from "@/db";
 
 export async function Header() {
   const user = await getCurrentUser();
   let pendingCount = 0;
   if (user?.isAdmin) {
-    const pending = await getPendingTeacherRequests(db);
-    pendingCount = pending.length;
+    const pendingTeachers = await getPendingTeacherRequests(db);
+    const pendingEvts = await getPendingEvents(db);
+    pendingCount = pendingTeachers.length + pendingEvts.length;
   }
 
   return (
@@ -23,6 +24,9 @@ export async function Header() {
           </Link>
           {user ? (
             <div className="flex items-center gap-3">
+              <Link href="/events/create" className="text-sm hover:text-indigo-600">
+                + Create
+              </Link>
               {user.isAdmin && (
                 <Link href="/admin/alerts" className="relative text-sm hover:text-indigo-600">
                   Admin

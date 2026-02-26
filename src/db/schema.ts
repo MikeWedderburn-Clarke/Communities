@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
@@ -22,15 +22,29 @@ export const users = sqliteTable("users", {
   showYoutube: integer("show_youtube", { mode: "boolean" }).notNull().default(false),
 });
 
+export const locations = sqliteTable("locations", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  city: text("city").notNull(),
+  country: text("country").notNull(),
+  latitude: real("latitude").notNull(),
+  longitude: real("longitude").notNull(),
+  createdBy: text("created_by").references(() => users.id),
+}, (table) => ([
+  uniqueIndex("locations_name_city_country_unique").on(table.name, table.city, table.country),
+]));
+
 export const events = sqliteTable("events", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
   description: text("description").notNull(),
   dateTime: text("date_time").notNull(), // ISO-8601
   endDateTime: text("end_date_time").notNull(), // ISO-8601
-  location: text("location").notNull(),
-  country: text("country").notNull(),
-  city: text("city").notNull(),
+  locationId: text("location_id")
+    .notNull()
+    .references(() => locations.id),
+  status: text("status", { enum: ["approved", "pending", "rejected"] }).notNull().default("pending"),
+  createdBy: text("created_by").references(() => users.id),
 });
 
 export const rsvps = sqliteTable("rsvps", {
@@ -44,4 +58,6 @@ export const rsvps = sqliteTable("rsvps", {
   role: text("role", { enum: ["Base", "Flyer", "Hybrid"] }).notNull(),
   showName: integer("show_name", { mode: "boolean" }).notNull().default(false),
   isTeaching: integer("is_teaching", { mode: "boolean" }).notNull().default(false),
-});
+}, (table) => ([
+  uniqueIndex("rsvps_event_user_unique").on(table.eventId, table.userId),
+]));

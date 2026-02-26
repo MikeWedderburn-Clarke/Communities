@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { getEventById } from "@/services/events";
+import { getEventDetail } from "@/services/events";
 import { generateIcs } from "@/services/ics";
 
 export async function GET(
@@ -8,7 +8,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const event = await getEventById(db, id);
+  const event = await getEventDetail(db, id, null);
 
   if (!event) {
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
@@ -20,7 +20,7 @@ export async function GET(
     description: event.description,
     dateTime: event.dateTime,
     endDateTime: event.endDateTime,
-    location: event.location,
+    location: `${event.location.name}, ${event.location.city}, ${event.location.country}`,
   });
 
   return new NextResponse(ics, {

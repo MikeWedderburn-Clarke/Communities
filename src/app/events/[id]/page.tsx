@@ -36,7 +36,7 @@ export default async function EventDetailPage({
 
         <div className="mt-4 space-y-2 text-gray-600">
           <p>{formatDateTime(event.dateTime, event.endDateTime)}</p>
-          <p>{event.location}</p>
+          <p>{event.location.name}, {event.location.city}, {event.location.country}</p>
         </div>
 
         <p className="mt-6 leading-relaxed text-gray-700">

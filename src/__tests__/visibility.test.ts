@@ -10,6 +10,10 @@ import {
   getPendingTeacherRequests,
   approveTeacher,
   denyTeacher,
+  createEvent,
+  getPendingEvents,
+  approveEvent,
+  rejectEvent,
 } from "@/services/events";
 import * as schema from "@/db/schema";
 
@@ -23,15 +27,23 @@ function seedTestData(db: TestDb) {
     { id: "u-admin", name: "Dan", email: "dan@test.com", isAdmin: true },
   ]).run();
 
+  db.insert(schema.locations).values({
+    id: "loc-test",
+    name: "Test Venue",
+    city: "London",
+    country: "United Kingdom",
+    latitude: 51.5074,
+    longitude: -0.1278,
+  }).run();
+
   db.insert(schema.events).values({
     id: "e1",
     title: "Test Jam",
     description: "A test event",
     dateTime: "2026-03-08T11:00:00Z",
     endDateTime: "2026-03-08T14:00:00Z",
-    location: "London",
-    country: "United Kingdom",
-    city: "London",
+    locationId: "loc-test",
+    status: "approved",
   }).run();
 }
 
@@ -307,5 +319,64 @@ describe("teacher request/approval flow", () => {
     const pending = await getPendingTeacherRequests(db);
     expect(pending).toHaveLength(1);
     expect(pending[0].userId).toBe("u2");
+  });
+});
+
+describe("event creation and approval flow", () => {
+  let db: TestDb;
+
+  beforeEach(() => {
+    db = createTestDb();
+    seedTestData(db);
+  });
+
+  const eventInput = {
+    title: "New Jam",
+    description: "A community jam",
+    dateTime: "2026-05-01T10:00:00Z",
+    endDateTime: "2026-05-01T12:00:00Z",
+    locationId: "loc-test",
+  };
+
+  it("admin-created events are auto-approved", async () => {
+    const id = await createEvent(db, eventInput, "u-admin", true);
+    const events = await getAllEvents(db);
+    expect(events.some((e) => e.id === id)).toBe(true);
+  });
+
+  it("non-admin events are pending and not in public list", async () => {
+    const id = await createEvent(db, eventInput, "u1", false);
+    const events = await getAllEvents(db);
+    expect(events.some((e) => e.id === id)).toBe(false);
+  });
+
+  it("pending events appear in getPendingEvents", async () => {
+    await createEvent(db, eventInput, "u1", false);
+    const pending = await getPendingEvents(db);
+    expect(pending).toHaveLength(1);
+    expect(pending[0].title).toBe("New Jam");
+    expect(pending[0].createdByName).toBe("Alice");
+  });
+
+  it("approved pending event appears in public list", async () => {
+    const id = await createEvent(db, eventInput, "u1", false);
+    await approveEvent(db, id);
+    const events = await getAllEvents(db);
+    expect(events.some((e) => e.id === id)).toBe(true);
+  });
+
+  it("rejected event does not appear in public list", async () => {
+    const id = await createEvent(db, eventInput, "u1", false);
+    await rejectEvent(db, id);
+    const events = await getAllEvents(db);
+    expect(events.some((e) => e.id === id)).toBe(false);
+  });
+
+  it("rejected event is removed from pending list", async () => {
+    await createEvent(db, eventInput, "u1", false);
+    const pending = await getPendingEvents(db);
+    await rejectEvent(db, pending[0].id);
+    const pendingAfter = await getPendingEvents(db);
+    expect(pendingAfter).toHaveLength(0);
   });
 });

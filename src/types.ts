@@ -7,6 +7,25 @@ export type Role = (typeof ROLES)[number];
 /** Distribution of roles among RSVPs. */
 export type RoleCounts = Record<Role, number>;
 
+// ── Location ────────────────────────────────────────────────────────
+
+export interface Location {
+  id: string;
+  name: string;
+  city: string;
+  country: string;
+  latitude: number;
+  longitude: number;
+}
+
+export interface CreateLocationInput {
+  name: string;
+  city: string;
+  country: string;
+  latitude: number;
+  longitude: number;
+}
+
 // ── API / view models ──────────────────────────────────────────────
 
 export interface EventSummary {
@@ -15,9 +34,7 @@ export interface EventSummary {
   description: string;
   dateTime: string; // ISO-8601
   endDateTime: string; // ISO-8601
-  location: string;
-  country: string;
-  city: string;
+  location: Location;
   attendeeCount: number;
   roleCounts: RoleCounts;
   teacherCount: number;
@@ -91,22 +108,51 @@ export interface TeacherRequest {
   requestedAt: string; // ISO-8601
 }
 
+// ── Event creation / approval ─────────────────────────────────────
+
+export const EVENT_STATUSES = ["approved", "pending", "rejected"] as const;
+export type EventStatus = (typeof EVENT_STATUSES)[number];
+
+export interface CreateEventInput {
+  title: string;
+  description: string;
+  dateTime: string; // ISO-8601
+  endDateTime: string; // ISO-8601
+  locationId: string;
+}
+
+/** Pending event for admin review. */
+export interface PendingEvent {
+  id: string;
+  title: string;
+  dateTime: string;
+  locationName: string;
+  createdByName: string;
+  createdByEmail: string;
+}
+
 // ── Location hierarchy (map view) ────────────────────────────────
 
 export interface VenueGroup {
   venue: string;
+  latitude: number;
+  longitude: number;
   events: EventSummary[];
   eventCount: number;
 }
 
 export interface CityGroup {
   city: string;
+  latitude: number;
+  longitude: number;
   venues: VenueGroup[];
   eventCount: number;
 }
 
 export interface CountryGroup {
   country: string;
+  latitude: number;
+  longitude: number;
   cities: CityGroup[];
   eventCount: number;
 }

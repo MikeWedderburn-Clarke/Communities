@@ -13,7 +13,7 @@ interface Props {
 export default async function EventsPage({ searchParams }: Props) {
   const { view } = await searchParams;
   const events = await getAllEvents(db);
-  const initialView = view === "map" ? "map" : view === "mapv2" ? "mapv2" : "list";
+  const initialView = view === "map" ? "map" : "list";
 
   return (
     <>

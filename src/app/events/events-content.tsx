@@ -1,16 +1,16 @@
 "use client";
 
-import { lazy, Suspense } from "react";
+import dynamic from "next/dynamic";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { EventsList } from "./events-list";
-import { MapView } from "./map-view";
 import type { EventSummary } from "@/types";
 
-const MapV2 = lazy(() =>
-  import("./map-v2").then((m) => ({ default: m.MapV2 })),
+const LeafletMap = dynamic(
+  () => import("./leaflet-map").then((m) => m.LeafletMap),
+  { ssr: false, loading: () => <p className="mt-8 text-gray-400">Loading map...</p> },
 );
 
-type View = "list" | "map" | "mapv2";
+type View = "list" | "map";
 
 interface Props {
   events: EventSummary[];
@@ -38,7 +38,6 @@ export function EventsContent({ events, initialView }: Props) {
   const buttons: { value: View; label: string }[] = [
     { value: "list", label: "List" },
     { value: "map", label: "Map" },
-    { value: "mapv2", label: "Map V2" },
   ];
 
   return (
@@ -60,16 +59,7 @@ export function EventsContent({ events, initialView }: Props) {
       </div>
 
       {view === "list" && <EventsList events={events} />}
-      {view === "map" && <MapView events={events} />}
-      {view === "mapv2" && (
-        <Suspense
-          fallback={
-            <p className="mt-8 text-gray-400">Loading map...</p>
-          }
-        >
-          <MapV2 events={events} />
-        </Suspense>
-      )}
+      {view === "map" && <LeafletMap events={events} />}
     </>
   );
 }
