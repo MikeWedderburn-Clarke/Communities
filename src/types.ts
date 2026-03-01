@@ -72,6 +72,13 @@ export interface EventSummary {
   costAmount: number | null;
   costCurrency: string | null;
   concessionAmount: number | null;
+  maxAttendees: number | null;
+  /** Derived: true when maxAttendees is set and attendeeCount >= maxAttendees */
+  isFull: boolean;
+  /** Derived: true when nextOccurrence is null (no future occurrence) */
+  isPast: boolean;
+  /** The logged-in user's own RSVP for this event, or null if not RSVPed */
+  userRsvp: { role: Role; paymentStatus: string | null } | null;
 }
 
 export interface EventDetail extends EventSummary {
@@ -165,6 +172,7 @@ export interface CreateEventInput {
   costAmount: number | null;
   costCurrency: string | null;
   concessionAmount: number | null;
+  maxAttendees: number | null;
 }
 
 /** Pending event for admin review. */

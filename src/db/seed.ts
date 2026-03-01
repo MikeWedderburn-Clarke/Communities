@@ -59,7 +59,8 @@ sqlite.exec(`
     prerequisites TEXT,
     cost_amount REAL,
     cost_currency TEXT,
-    concession_amount REAL
+    concession_amount REAL,
+    max_attendees INTEGER
   );
   CREATE TABLE IF NOT EXISTS rsvps (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,7 +68,8 @@ sqlite.exec(`
     user_id TEXT NOT NULL REFERENCES users(id),
     role TEXT NOT NULL CHECK(role IN ('Base','Flyer','Hybrid')),
     show_name INTEGER NOT NULL DEFAULT 0,
-    is_teaching INTEGER NOT NULL DEFAULT 0
+    is_teaching INTEGER NOT NULL DEFAULT 0,
+    payment_status TEXT
   );
   CREATE UNIQUE INDEX IF NOT EXISTS rsvps_event_user_unique ON rsvps(event_id, user_id);
   CREATE INDEX IF NOT EXISTS events_status_datetime_idx ON events(status, date_time);
@@ -193,6 +195,7 @@ const seedEvents = [
     costAmount: 15,
     costCurrency: "GBP",
     concessionAmount: 10,
+    maxAttendees: 12,
   },
   {
     id: "evt-flight-night",
@@ -209,6 +212,7 @@ const seedEvents = [
     costAmount: 8,
     costCurrency: "GBP",
     concessionAmount: null,
+    maxAttendees: 8,
   },
   {
     id: "evt-washing-machine",
@@ -225,6 +229,7 @@ const seedEvents = [
     costAmount: 25,
     costCurrency: "GBP",
     concessionAmount: 18,
+    maxAttendees: 16,
   },
   {
     id: "evt-park-jam-april",
@@ -412,7 +417,7 @@ const seedEvents = [
 ];
 
 const insertEvent = sqlite.prepare(
-  "INSERT OR IGNORE INTO events (id, title, description, date_time, end_date_time, location_id, status, created_by, date_added, last_updated, recurrence_type, recurrence_end_date, skill_level, prerequisites, cost_amount, cost_currency, concession_amount) VALUES (?, ?, ?, ?, ?, ?, 'approved', 'user-dan', ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+  "INSERT OR IGNORE INTO events (id, title, description, date_time, end_date_time, location_id, status, created_by, date_added, last_updated, recurrence_type, recurrence_end_date, skill_level, prerequisites, cost_amount, cost_currency, concession_amount, max_attendees) VALUES (?, ?, ?, ?, ?, ?, 'approved', 'user-dan', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 );
 for (const e of seedEvents) {
   insertEvent.run(
@@ -431,6 +436,7 @@ for (const e of seedEvents) {
     e.costAmount ?? null,
     e.costCurrency ?? null,
     e.concessionAmount ?? null,
+    e.maxAttendees ?? null,
   );
 }
 
@@ -448,10 +454,10 @@ const seedRsvps = [
 ];
 
 const insertRsvp = sqlite.prepare(
-  "INSERT OR IGNORE INTO rsvps (event_id, user_id, role, show_name, is_teaching) VALUES (?, ?, ?, ?, ?)"
+  "INSERT OR IGNORE INTO rsvps (event_id, user_id, role, show_name, is_teaching, payment_status) VALUES (?, ?, ?, ?, ?, ?)"
 );
 for (const r of seedRsvps) {
-  insertRsvp.run(r.eventId, r.userId, r.role, r.showName, r.isTeaching);
+  insertRsvp.run(r.eventId, r.userId, r.role, r.showName, r.isTeaching, null);
 }
 
 console.log("Seed complete: %d users, %d locations, %d events, %d RSVPs", seedUsers.length, seedLocations.length, seedEvents.length, seedRsvps.length);

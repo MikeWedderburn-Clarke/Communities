@@ -195,6 +195,16 @@ export function validateEventInput(body: unknown): {
     }
   }
 
+  // maxAttendees — optional positive integer
+  let maxAttendees: number | null = null;
+  if (obj.maxAttendees !== undefined && obj.maxAttendees !== null) {
+    if (typeof obj.maxAttendees !== "number" || !Number.isInteger(obj.maxAttendees) || obj.maxAttendees < 1) {
+      errors.push({ field: "maxAttendees", message: "maxAttendees must be a positive integer" });
+    } else {
+      maxAttendees = obj.maxAttendees;
+    }
+  }
+
   if (errors.length > 0) {
     return { valid: false, errors };
   }
@@ -213,6 +223,7 @@ export function validateEventInput(body: unknown): {
       costAmount,
       costCurrency,
       concessionAmount,
+      maxAttendees,
     },
   };
 }

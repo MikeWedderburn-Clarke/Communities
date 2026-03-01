@@ -1,4 +1,4 @@
-import { eq, and, gte, isNotNull, or, ne } from "drizzle-orm";
+import { eq, and, isNotNull } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "@/db/schema";
 import { computeNextOccurrence } from "@/lib/recurrence";
@@ -90,6 +90,7 @@ type EventListRow = {
   costAmount: number | null;
   costCurrency: string | null;
   concessionAmount: number | null;
+  maxAttendees: number | null;
   rsvpRole: string | null;
   rsvpIsTeaching: boolean | null;
 };
@@ -132,6 +133,10 @@ function groupEventRows(rows: EventListRow[]): EventSummary[] {
         costAmount: row.costAmount,
         costCurrency: row.costCurrency,
         concessionAmount: row.concessionAmount,
+        maxAttendees: row.maxAttendees,
+        isFull: false, // recomputed after attendeeCount is tallied
+        isPast: false, // set by finalizeEventSummaries
+        userRsvp: null, // populated by page.tsx after getUserRsvpMap
       });
     }
     if (row.rsvpRole !== null) {
@@ -141,6 +146,7 @@ function groupEventRows(rows: EventListRow[]): EventSummary[] {
         summary.roleCounts[row.rsvpRole as Role]++;
       }
       if (row.rsvpIsTeaching) summary.teacherCount++;
+      summary.isFull = summary.maxAttendees !== null && summary.attendeeCount >= summary.maxAttendees;
     }
   }
   return Array.from(map.values());
@@ -155,11 +161,14 @@ function attachNextOccurrence(summary: EventSummary, referenceIso: string): Even
   return summary;
 }
 
-function finalizeEventSummaries(rows: EventListRow[], referenceIso: string, dropPast: boolean): EventSummary[] {
-  const summaries = groupEventRows(rows).map((event) => attachNextOccurrence(event, referenceIso));
-  const filtered = dropPast ? summaries.filter((event) => event.nextOccurrence !== null) : summaries;
+function finalizeEventSummaries(rows: EventListRow[], referenceIso: string): EventSummary[] {
+  const summaries = groupEventRows(rows).map((event) => {
+    attachNextOccurrence(event, referenceIso);
+    event.isPast = event.nextOccurrence === null;
+    return event;
+  });
   const getSortValue = (event: EventSummary) => event.nextOccurrence?.dateTime ?? event.dateTime;
-  return filtered.sort((a, b) => getSortValue(a).localeCompare(getSortValue(b)));
+  return summaries.sort((a, b) => getSortValue(a).localeCompare(getSortValue(b)));
 }
 
 const EVENT_LIST_SELECT = (s: typeof schema) => ({
@@ -185,6 +194,7 @@ const EVENT_LIST_SELECT = (s: typeof schema) => ({
   costAmount: s.events.costAmount,
   costCurrency: s.events.costCurrency,
   concessionAmount: s.events.concessionAmount,
+  maxAttendees: s.events.maxAttendees,
   rsvpRole: s.rsvps.role,
   rsvpIsTeaching: s.rsvps.isTeaching,
 });
@@ -196,14 +206,9 @@ export async function getUpcomingEvents(db: Db): Promise<EventSummary[]> {
     .from(schema.events)
     .innerJoin(schema.locations, eq(schema.events.locationId, schema.locations.id))
     .leftJoin(schema.rsvps, eq(schema.rsvps.eventId, schema.events.id))
-    .where(
-      and(
-        eq(schema.events.status, "approved"),
-        or(gte(schema.events.dateTime, now), ne(schema.events.recurrenceType, "none"))
-      )
-    )
+    .where(eq(schema.events.status, "approved"))
     .orderBy(schema.events.dateTime);
-  return finalizeEventSummaries(rows, now, true);
+  return finalizeEventSummaries(rows, now).filter((e) => !e.isPast);
 }
 
 export async function getAllEvents(db: Db): Promise<EventSummary[]> {
@@ -213,14 +218,9 @@ export async function getAllEvents(db: Db): Promise<EventSummary[]> {
     .from(schema.events)
     .innerJoin(schema.locations, eq(schema.events.locationId, schema.locations.id))
     .leftJoin(schema.rsvps, eq(schema.rsvps.eventId, schema.events.id))
-    .where(
-      and(
-        eq(schema.events.status, "approved"),
-        or(gte(schema.events.dateTime, now), ne(schema.events.recurrenceType, "none"))
-      )
-    )
+    .where(eq(schema.events.status, "approved"))
     .orderBy(schema.events.dateTime);
-  return finalizeEventSummaries(rows, now, true);
+  return finalizeEventSummaries(rows, now);
 }
 
 export async function getEventDetail(
@@ -247,6 +247,7 @@ export async function getEventDetail(
       costAmount: schema.events.costAmount,
       costCurrency: schema.events.costCurrency,
       concessionAmount: schema.events.concessionAmount,
+      maxAttendees: schema.events.maxAttendees,
       locationId: schema.locations.id,
       locationName: schema.locations.name,
       locationCity: schema.locations.city,
@@ -333,6 +334,10 @@ export async function getEventDetail(
     costAmount: eventRow.costAmount,
     costCurrency: eventRow.costCurrency,
     concessionAmount: eventRow.concessionAmount,
+    maxAttendees: eventRow.maxAttendees,
+    isFull: eventRow.maxAttendees !== null && rsvpRows.length >= eventRow.maxAttendees,
+    isPast: computeNextOccurrence(eventRow.dateTime, eventRow.endDateTime, recurrence) === null,
+    userRsvp: null,
   };
 }
 
@@ -377,6 +382,24 @@ export async function getEventById(
     .where(eq(schema.events.id, eventId))
     .limit(1);
   return event ?? null;
+}
+
+/** Returns a map of eventId → {role, paymentStatus} for a specific user's RSVPs. */
+export async function getUserRsvpMap(
+  db: Db,
+  userId: string
+): Promise<Record<string, { role: Role; paymentStatus: string | null }>> {
+  const rows = await db
+    .select({
+      eventId: schema.rsvps.eventId,
+      role: schema.rsvps.role,
+      paymentStatus: schema.rsvps.paymentStatus,
+    })
+    .from(schema.rsvps)
+    .where(eq(schema.rsvps.userId, userId));
+  return Object.fromEntries(
+    rows.map((r) => [r.eventId, { role: r.role as Role, paymentStatus: r.paymentStatus ?? null }])
+  );
 }
 
 // ── Teacher request/approval ───────────────────────────────────────
@@ -453,6 +476,7 @@ export async function createEvent(
     costAmount: input.costAmount,
     costCurrency: input.costCurrency,
     concessionAmount: input.concessionAmount,
+    maxAttendees: input.maxAttendees,
     status,
     createdBy,
     dateAdded: now,

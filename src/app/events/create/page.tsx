@@ -62,6 +62,7 @@ export default function CreateEventPage() {
   const [costAmount, setCostAmount] = useState("");
   const [costCurrency, setCostCurrency] = useState("GBP");
   const [concessionAmount, setConcessionAmount] = useState("");
+  const [maxAttendees, setMaxAttendees] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -235,6 +236,7 @@ export default function CreateEventPage() {
       costAmount: costAmount !== "" ? parseFloat(costAmount) : null,
       costCurrency: costAmount !== "" ? costCurrency : null,
       concessionAmount: concessionAmount !== "" ? parseFloat(concessionAmount) : null,
+      maxAttendees: maxAttendees !== "" ? parseInt(maxAttendees, 10) : null,
     };
 
     try {
@@ -403,6 +405,23 @@ export default function CreateEventPage() {
             />
             <p className="mt-1 text-xs text-gray-500">Reduced rate for students, unwaged, etc.</p>
           </div>
+        </div>
+
+        {/* Max attendees */}
+        <div>
+          <label htmlFor="maxAttendees" className="block text-sm font-medium text-gray-700">
+            Max attendees <span className="font-normal text-gray-400">(optional — leave blank for no limit)</span>
+          </label>
+          <input
+            id="maxAttendees"
+            type="number"
+            min="1"
+            step="1"
+            value={maxAttendees}
+            onChange={(e) => setMaxAttendees(e.target.value)}
+            className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+            placeholder="e.g. 20"
+          />
         </div>
 
         {/* Date + Times */}

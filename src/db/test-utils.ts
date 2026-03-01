@@ -64,7 +64,8 @@ export function createTestDb() {
       prerequisites TEXT,
       cost_amount REAL,
       cost_currency TEXT,
-      concession_amount REAL
+      concession_amount REAL,
+      max_attendees INTEGER
     );
     CREATE TABLE rsvps (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,7 +73,8 @@ export function createTestDb() {
       user_id TEXT NOT NULL REFERENCES users(id),
       role TEXT NOT NULL CHECK(role IN ('Base','Flyer','Hybrid')),
       show_name INTEGER NOT NULL DEFAULT 0,
-      is_teaching INTEGER NOT NULL DEFAULT 0
+      is_teaching INTEGER NOT NULL DEFAULT 0,
+      payment_status TEXT
     );
     CREATE UNIQUE INDEX rsvps_event_user_unique ON rsvps(event_id, user_id);
     CREATE INDEX events_status_datetime_idx ON events(status, date_time);

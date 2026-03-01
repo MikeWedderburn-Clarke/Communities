@@ -60,6 +60,7 @@ export const events = sqliteTable("events", {
   costAmount: real("cost_amount"),
   costCurrency: text("cost_currency"),
   concessionAmount: real("concession_amount"),
+  maxAttendees: integer("max_attendees"), // nullable; null = no limit
 }, (table) => ([
   // Composite index covering the WHERE status='approved' + ORDER BY date_time
   // used by getAllEvents / getUpcomingEvents on every page load.
@@ -77,6 +78,7 @@ export const rsvps = sqliteTable("rsvps", {
   role: text("role", { enum: ["Base", "Flyer", "Hybrid"] }).notNull(),
   showName: integer("show_name", { mode: "boolean" }).notNull().default(false),
   isTeaching: integer("is_teaching", { mode: "boolean" }).notNull().default(false),
+  paymentStatus: text("payment_status"), // nullable; null = unpaid; "full" | "concession" | extensible
 }, (table) => ([
   uniqueIndex("rsvps_event_user_unique").on(table.eventId, table.userId),
 ]));

@@ -410,4 +410,46 @@ describe("validateEventInput", () => {
       expect(result.data.concessionAmount).toBeNull();
     }
   });
+
+  // ── maxAttendees ───────────────────────────────────────────────────────────
+
+  it("accepts a valid positive integer maxAttendees", () => {
+    const result = validateEventInput({ ...validEvent, maxAttendees: 20 });
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.maxAttendees).toBe(20);
+    }
+  });
+
+  it("stores null maxAttendees when omitted", () => {
+    const result = validateEventInput(validEvent);
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.maxAttendees).toBeNull();
+    }
+  });
+
+  it("rejects a negative maxAttendees", () => {
+    const result = validateEventInput({ ...validEvent, maxAttendees: -1 });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "maxAttendees")).toBe(true);
+    }
+  });
+
+  it("rejects a float maxAttendees", () => {
+    const result = validateEventInput({ ...validEvent, maxAttendees: 10.5 });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "maxAttendees")).toBe(true);
+    }
+  });
+
+  it("rejects zero maxAttendees", () => {
+    const result = validateEventInput({ ...validEvent, maxAttendees: 0 });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "maxAttendees")).toBe(true);
+    }
+  });
 });

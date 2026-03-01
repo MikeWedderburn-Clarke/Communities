@@ -21,6 +21,10 @@ interface Props {
   lastLogin: string | null;
 }
 
+function hasNewEvents(evts: EventSummary[], lastLogin: string | null) {
+  return evts.some((e) => !e.isPast && isEventFresh(e, lastLogin));
+}
+
 export function EventsHierarchy({ events, homeCity, lastLogin }: Props) {
   const hierarchy = useMemo(() => buildLocationHierarchy(events), [events]);
   const homeCityName = normalizeCityName(homeCity) ?? homeCity ?? null;
@@ -67,18 +71,30 @@ export function EventsHierarchy({ events, homeCity, lastLogin }: Props) {
       <BreadcrumbNav items={breadcrumbItems} />
       {drill.level === "globe" && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {hierarchy.map((country) => (
+          {hierarchy.map((country) => {
+            const isNew = country.cities.some((ci) =>
+              ci.venues.some((v) => hasNewEvents(v.events, lastLogin))
+            );
+            return (
             <button
               key={country.country}
               type="button"
               onClick={() => setDrill({ level: "country", country: country.country })}
-              className="rounded-lg border border-gray-200 bg-white p-5 text-left shadow-sm transition hover:border-indigo-300 hover:shadow-md"
+              className={`rounded-lg border p-5 text-left shadow-sm transition hover:shadow-md ${
+                isNew
+                  ? "border-blue-200 bg-blue-50/40 hover:border-blue-300"
+                  : "border-gray-200 bg-white hover:border-indigo-300"
+              }`}
             >
               <h3 className="text-lg font-semibold">{country.country}</h3>
-              <p className="mt-2 text-2xl font-bold text-gray-900">{country.eventCount}</p>
+              <p className={`mt-2 text-2xl font-bold ${isNew ? "text-blue-600" : "text-gray-900"}`}>
+                {country.eventCount}
+                {isNew && <span className="ml-1.5 inline-block h-2 w-2 rounded-full bg-blue-500 align-middle" />}
+              </p>
               <p className="text-xs uppercase tracking-wide text-gray-400">events</p>
             </button>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -87,18 +103,28 @@ export function EventsHierarchy({ events, homeCity, lastLogin }: Props) {
         if (!country) return <p className="text-gray-500">Country not found.</p>;
         return (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {country.cities.map((city) => (
+            {country.cities.map((city) => {
+              const isNew = city.venues.some((v) => hasNewEvents(v.events, lastLogin));
+              return (
               <button
                 key={city.city}
                 type="button"
                 onClick={() => setDrill({ level: "city", country: drill.country, city: city.city })}
-                className="rounded-lg border border-gray-200 bg-white p-5 text-left shadow-sm transition hover:border-indigo-300 hover:shadow-md"
+                className={`rounded-lg border p-5 text-left shadow-sm transition hover:shadow-md ${
+                  isNew
+                    ? "border-blue-200 bg-blue-50/40 hover:border-blue-300"
+                    : "border-gray-200 bg-white hover:border-indigo-300"
+                }`}
               >
                 <h3 className="text-lg font-semibold">{city.city}</h3>
-                <p className="mt-2 text-2xl font-bold text-gray-900">{city.eventCount}</p>
+                <p className={`mt-2 text-2xl font-bold ${isNew ? "text-blue-600" : "text-gray-900"}`}>
+                  {city.eventCount}
+                  {isNew && <span className="ml-1.5 inline-block h-2 w-2 rounded-full bg-blue-500 align-middle" />}
+                </p>
                 <p className="text-xs uppercase tracking-wide text-gray-400">events</p>
               </button>
-            ))}
+              );
+            })}
           </div>
         );
       })()}
@@ -109,18 +135,28 @@ export function EventsHierarchy({ events, homeCity, lastLogin }: Props) {
         if (!city) return <p className="text-gray-500">City not found.</p>;
         return (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {city.venues.map((venue) => (
+            {city.venues.map((venue) => {
+              const isNew = hasNewEvents(venue.events, lastLogin);
+              return (
               <button
                 key={venue.venue}
                 type="button"
                 onClick={() => setDrill({ level: "venue", country: drill.country, city: drill.city, venue: venue.venue })}
-                className="rounded-lg border border-gray-200 bg-white p-5 text-left shadow-sm transition hover:border-indigo-300 hover:shadow-md"
+                className={`rounded-lg border p-5 text-left shadow-sm transition hover:shadow-md ${
+                  isNew
+                    ? "border-blue-200 bg-blue-50/40 hover:border-blue-300"
+                    : "border-gray-200 bg-white hover:border-indigo-300"
+                }`}
               >
                 <h3 className="text-lg font-semibold">{venue.venue}</h3>
-                <p className="mt-2 text-2xl font-bold text-gray-900">{venue.eventCount}</p>
+                <p className={`mt-2 text-2xl font-bold ${isNew ? "text-blue-600" : "text-gray-900"}`}>
+                  {venue.eventCount}
+                  {isNew && <span className="ml-1.5 inline-block h-2 w-2 rounded-full bg-blue-500 align-middle" />}
+                </p>
                 <p className="text-xs uppercase tracking-wide text-gray-400">events</p>
               </button>
-            ))}
+              );
+            })}
           </div>
         );
       })()}
@@ -164,7 +200,7 @@ export function EventsHierarchy({ events, homeCity, lastLogin }: Props) {
                 <EventCard
                   key={event.id}
                   event={event}
-                  highlight={isEventFresh(event, lastLogin)}
+                  lastLogin={lastLogin}
                   from="list"
                 />
               ))}

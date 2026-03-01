@@ -35,6 +35,10 @@ function makeEvent(overrides: Omit<Partial<EventSummary>, "location"> & { id: st
     costAmount: null,
     costCurrency: null,
     concessionAmount: null,
+    maxAttendees: null,
+    isFull: false,
+    isPast: false,
+    userRsvp: null,
     ...overrides,
     location,
   } as EventSummary;

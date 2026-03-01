@@ -344,6 +344,7 @@ describe("event creation and approval flow", () => {
     costAmount: null,
     costCurrency: null,
     concessionAmount: null,
+    maxAttendees: null,
   };
 
   it("admin-created events are auto-approved", async () => {
@@ -412,7 +413,7 @@ describe("recurrence-aware listings", () => {
     seedTestData(db);
   });
 
-  it("omits past single events from getAllEvents", async () => {
+  it("past single events are included in getAllEvents but tagged isPast", async () => {
     db.insert(schema.events).values({
       id: "evt-past",
       title: "Old Jam",
@@ -428,7 +429,9 @@ describe("recurrence-aware listings", () => {
     }).run();
 
     const events = await getAllEvents(db);
-    expect(events.some((e) => e.id === "evt-past")).toBe(false);
+    const past = events.find((e) => e.id === "evt-past");
+    expect(past).toBeDefined();
+    expect(past!.isPast).toBe(true);
   });
 
   it("surfaces recurring events even if their first instance is past", async () => {

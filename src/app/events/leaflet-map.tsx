@@ -108,6 +108,26 @@ export function LeafletMap({ events, homeCity, userLastLogin }: Props) {
     [events, userLastLogin],
   );
 
+  // Countries/cities that contain at least one fresh event (for blue bubble tint)
+  const freshCountries = useMemo(() => {
+    const set = new Set<string>();
+    for (const event of events) {
+      if (freshEventIds.has(event.id)) set.add(event.location.country);
+    }
+    return set;
+  }, [events, freshEventIds]);
+
+  const freshCities = useMemo(() => {
+    const set = new Set<string>();
+    for (const event of events) {
+      if (freshEventIds.has(event.id)) {
+        const canonical = normalizeCityName(event.location.city) ?? event.location.city;
+        set.add(`${canonical}||${event.location.country}`);
+      }
+    }
+    return set;
+  }, [events, freshEventIds]);
+
   const currentCenter = useMemo<[number, number]>(() => {
     if (level === 3 && activeCity && activeCountry) {
       return cityMap.get(`${activeCity}||${activeCountry}`)?.center ?? globalCenter;
@@ -201,7 +221,7 @@ export function LeafletMap({ events, homeCity, userLastLogin }: Props) {
               <Marker
                 key={country.country}
                 position={country.center}
-                icon={countIcon(country.count, "#6366f1", `${country.country}: ${country.count} event${country.count !== 1 ? "s" : ""}`)}
+                icon={countIcon(country.count, freshCountries.has(country.country) ? "#3b82f6" : "#6366f1", `${country.country}: ${country.count} event${country.count !== 1 ? "s" : ""}`)}
                 eventHandlers={{ click: () => handleCountry(country.country) }}
               />
             ))}
@@ -210,7 +230,7 @@ export function LeafletMap({ events, homeCity, userLastLogin }: Props) {
               <Marker
                 key={`${city.city}-${city.country}`}
                 position={city.center}
-                icon={countIcon(city.count, "#0ea5e9", `${city.city}: ${city.count} event${city.count !== 1 ? "s" : ""}`)}
+                icon={countIcon(city.count, freshCities.has(`${city.city}||${city.country}`) ? "#3b82f6" : "#0ea5e9", `${city.city}: ${city.count} event${city.count !== 1 ? "s" : ""}`)}
                 eventHandlers={{ click: () => handleCity(city.country, city.city) }}
               />
             ))}
@@ -219,7 +239,7 @@ export function LeafletMap({ events, homeCity, userLastLogin }: Props) {
               <Marker
                 key={event.id}
                 position={[event.location.latitude, event.location.longitude]}
-                icon={eventPillIcon(event.title, freshEventIds.has(event.id))}
+                icon={eventPillIcon(event, userLastLogin)}
                 eventHandlers={{ click: () => (window.location.href = `/events/${event.id}?from=map`) }}
               />
             ))}
@@ -286,11 +306,17 @@ function countIcon(count: number, color: string, title?: string, size = 58) {
   });
 }
 
-function eventPillIcon(title: string, highlight: boolean) {
-  const color = highlight ? "#dc2626" : "#059669";
-  const label = title.length > 24 ? `${title.slice(0, 23)}…` : title;
+function eventPillIcon(event: EventSummary, lastLogin: string | null) {
+  let color: string;
+  if (event.isPast) color = "#f97316";
+  else if (event.isFull) color = "#dc2626";
+  else if (isEventFresh(event, lastLogin)) color = "#3b82f6";
+  else if (event.userRsvp && (event.costAmount ?? 0) > 0 && !event.userRsvp.paymentStatus) color = "#ca8a04";
+  else if (event.userRsvp) color = "#059669";
+  else color = "#059669";
+  const label = event.title.length > 24 ? `${event.title.slice(0, 23)}…` : event.title;
   return L.divIcon({
-    html: `<div title="${escapeAttr(title)}" style="background:${color};color:#fff;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);cursor:pointer;box-sizing:border-box;">${label}</div>`,
+    html: `<div title="${escapeAttr(event.title)}" style="background:${color};color:#fff;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);cursor:pointer;box-sizing:border-box;">${label}</div>`,
     className: "",
     iconSize: L.point(160, 28),
     iconAnchor: L.point(80, 14),

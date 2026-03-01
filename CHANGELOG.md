@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 
 ---
 
+## 2026-03-01 (2)
+
+- Event filter pills (New / Full / Past / Booked / To Pay) added above the event list; all filters off shows upcoming only; any filter active uses OR-logic to show matching events; Booked and To Pay pills are hidden when not logged in
+- Year → Month date drill-down filter: year select appears when events span multiple years, month select appears once a year is chosen; both apply on top of the status filter
+- Colour-coded event cards: orange border = past, red = full, blue = new (added/updated after last login), yellow = to pay, green = booked, default = gray
+- Hierarchy (Globe → Country → City → Venue) country/city/venue nodes now show a blue count badge and dot indicator when any child events are new
+- Leaflet map country and city bubbles tint blue when any events in that group are fresh; event pill markers use the same status colour palette as the cards
+- `maxAttendees` field added to events (schema, validation, service, seed, create-event form); `isFull` derived flag recomputed on each RSVP tally
+- `paymentStatus` column added to RSVPs (schema, seed, `getUserRsvpMap` service function)
+- `userRsvp: { role, paymentStatus } | null` field added to `EventSummary`; populated server-side via `getUserRsvpMap` and merged in `page.tsx`
+- `getAllEvents` now returns ALL approved events (past and upcoming); `finalizeEventSummaries` tags each with `isPast` rather than filtering
+- Visibility tests updated: "omits past events" test replaced with "past events are included and tagged `isPast`"; `eventInput` fixture extended with `maxAttendees: null`
+- 5 new `validateEventInput` tests covering `maxAttendees` (positive integer accepted, null when omitted, negative/float/zero rejected)
+
 ## 2026-03-01
 
 - Skill level picker (Beginner/Intermediate/Advanced/All levels), prerequisites free-text with auto-bullet on Enter, and cost + concession fields added to event creation; skill level badge and prerequisites card shown on event detail; cost displayed in RSVP section; attendees must confirm prerequisites before RSVPing
