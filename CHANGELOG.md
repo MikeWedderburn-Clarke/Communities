@@ -31,6 +31,9 @@ All notable changes to this project are documented here.
 - Validation: full recurrence rule validation (frequency enum, ISO end date, end date ≥ start date) and `what3names` / `howToFind` validation for location creation
 - New test file `src/__tests__/recurrence.test.ts` — 6 tests covering `formatRecurrenceSummary`
 - TypeScript errors fixed in `location-hierarchy.test.ts`, `profile.test.ts`, and `visibility.test.ts`; `tsc --noEmit` now clean
+- `.gitignore`: added `*.db-shm`, `*.db-wal`, `tsconfig.tsbuildinfo` to prevent WAL files and build artifacts from being staged
+- `copilot-instructions.md` overhauled: added Tech stack, Implemented features, Not yet built, and Architecture conventions sections; post-change cycle updated to include `tsc --noEmit` and use `npm run db:seed`; Git workflow expanded to 6 steps including changelog maintenance rule
+- `CHANGELOG.md` created; all history back-filled and grouped by calendar day
 
 ---
 
