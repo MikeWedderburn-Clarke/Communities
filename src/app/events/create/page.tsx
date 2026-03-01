@@ -47,8 +47,7 @@ export default function CreateEventPage() {
   const [newLocName, setNewLocName] = useState("");
   const [newLocCity, setNewLocCity] = useState("");
   const [newLocCountry, setNewLocCountry] = useState("");
-  const [newLocLat, setNewLocLat] = useState("");
-  const [newLocLng, setNewLocLng] = useState("");
+  const [newLocCoords, setNewLocCoords] = useState("");
   const [newLocWhat3, setNewLocWhat3] = useState("");
   const [newLocDirections, setNewLocDirections] = useState("");
   const geoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -105,8 +104,7 @@ export default function CreateEventPage() {
     setNewLocName(venueName);
     setNewLocCity(city);
     setNewLocCountry(country);
-    setNewLocLat(result.lat);
-    setNewLocLng(result.lon);
+    setNewLocCoords(`${result.lat}, ${result.lon}`);
     setShowGeoDropdown(false);
     setGeoQuery(result.display_name);
   }
@@ -117,12 +115,24 @@ export default function CreateEventPage() {
     setError(null);
 
     const normalizedWhat3 = newLocWhat3.trim().replace(/\s+/g, ".");
+    const [rawLat, rawLng] = newLocCoords.split(",").map((s) => s.trim());
+    const latitude = parseFloat(rawLat ?? "");
+    const longitude = parseFloat(rawLng ?? "");
+    if (
+      isNaN(latitude) || isNaN(longitude) ||
+      latitude < -90 || latitude > 90 ||
+      longitude < -180 || longitude > 180
+    ) {
+      setError('Coordinates must be in "lat, lng" format, e.g. 51.5074, -0.1278');
+      setCreatingLocation(false);
+      return;
+    }
     const body = {
       name: newLocName,
       city: newLocCity,
       country: newLocCountry,
-      latitude: parseFloat(newLocLat),
-      longitude: parseFloat(newLocLng),
+      latitude,
+      longitude,
       what3names: normalizedWhat3 === "" ? null : normalizedWhat3,
       howToFind: newLocDirections.trim() === "" ? null : newLocDirections.trim(),
     };
@@ -157,8 +167,7 @@ export default function CreateEventPage() {
       setNewLocName("");
       setNewLocCity("");
       setNewLocCountry("");
-      setNewLocLat("");
-      setNewLocLng("");
+      setNewLocCoords("");
       setNewLocWhat3("");
       setNewLocDirections("");
     } catch {
@@ -467,12 +476,12 @@ export default function CreateEventPage() {
 
       {/* New location form — separate form to avoid nesting */}
       {showNewLocation && !selectedLocation && (() => {
-        const hasCoords = newLocLat !== "" && newLocLng !== "";
+        const hasCoords = newLocCoords.trim() !== "";
         const googleMapsUrl = hasCoords
-          ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${newLocLat},${newLocLng}`)}`
+          ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(newLocCoords.trim())}`
           : null;
         const what3wordsUrl = hasCoords
-          ? `https://what3words.com/search?search=${encodeURIComponent(`${newLocLat},${newLocLng}`)}`
+          ? `https://what3words.com/search?search=${encodeURIComponent(newLocCoords.trim())}`
           : "https://what3words.com/";
         return (
           <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
@@ -528,15 +537,10 @@ export default function CreateEventPage() {
                 <input id="locCountry" name="locCountry" type="text" required value={newLocCountry} onChange={(e) => setNewLocCountry(e.target.value)} className="mt-1 block w-full rounded border border-gray-300 px-2 py-1.5 text-sm" placeholder="e.g. United Kingdom" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="locLat" className="block text-sm text-gray-600">Latitude</label>
-                <input id="locLat" name="locLat" type="number" step="any" required min="-90" max="90" value={newLocLat} onChange={(e) => setNewLocLat(e.target.value)} className="mt-1 block w-full rounded border border-gray-300 px-2 py-1.5 text-sm" placeholder="51.5074" />
-              </div>
-              <div>
-                <label htmlFor="locLng" className="block text-sm text-gray-600">Longitude</label>
-                <input id="locLng" name="locLng" type="number" step="any" required min="-180" max="180" value={newLocLng} onChange={(e) => setNewLocLng(e.target.value)} className="mt-1 block w-full rounded border border-gray-300 px-2 py-1.5 text-sm" placeholder="-0.1278" />
-              </div>
+            <div>
+              <label htmlFor="locCoords" className="block text-sm text-gray-600">Coordinates</label>
+              <input id="locCoords" name="locCoords" type="text" required value={newLocCoords} onChange={(e) => setNewLocCoords(e.target.value)} className="mt-1 block w-full rounded border border-gray-300 px-2 py-1.5 font-mono text-sm" placeholder="51.5074, -0.1278" />
+              <p className="mt-1 text-xs text-gray-500">Paste directly from Google Maps — right-click a pin and copy the coordinates.</p>
             </div>
             {googleMapsUrl && (
               <p className="text-xs text-indigo-600">
@@ -564,7 +568,7 @@ export default function CreateEventPage() {
               <button type="submit" disabled={creatingLocation} className="rounded bg-indigo-600 px-3 py-1.5 text-sm text-white hover:bg-indigo-700 disabled:opacity-50">
                 {creatingLocation ? "Creating…" : "Create Location"}
               </button>
-              <button type="button" onClick={() => { setShowNewLocation(false); setGeoQuery(""); setGeoResults([]); setNewLocName(""); setNewLocCity(""); setNewLocCountry(""); setNewLocLat(""); setNewLocLng(""); setNewLocWhat3(""); setNewLocDirections(""); }} className="rounded border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-100">
+              <button type="button" onClick={() => { setShowNewLocation(false); setGeoQuery(""); setGeoResults([]); setNewLocName(""); setNewLocCity(""); setNewLocCountry(""); setNewLocCoords(""); setNewLocWhat3(""); setNewLocDirections(""); }} className="rounded border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-100">
                 Cancel
               </button>
             </div>

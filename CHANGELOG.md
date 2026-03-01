@@ -6,6 +6,7 @@ All notable changes to this project are documented here.
 
 ## 2026-03-01
 
+- Coordinate input in Add New Location form consolidated into a single `"lat, lng"` text field; accepts Google Maps right-click paste format directly; client-side validation rejects out-of-range or malformed values
 - `RecurrenceFrequency`, `RecurrenceRule`, and `EventOccurrence` types added to `src/types.ts`
 - `recurrence: RecurrenceRule | null` field added to `CreateEventInput`
 - `recurrence` and `nextOccurrence` fields added to `EventSummary`
