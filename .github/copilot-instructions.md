@@ -27,9 +27,13 @@ Web app first for iteration; keep architecture open so iOS/Android clients can b
 - Event freshness badges: "New" / "Updated" shown for events added or changed since the viewer's last login
 - External map links on event detail: Google Maps, Apple Maps, OpenStreetMap, What3Names
 - Nominatim geocoding in the Add Location form (search → auto-fill name, city, country, lat/lng)
+- Skill level picker (Beginner / Intermediate / Advanced / All levels) on event creation; colour-coded badge on event detail
+- Prerequisites free-text field on event creation (auto-inserts `• ` bullet on Enter); displayed as amber card on event detail; RSVP form requires attendees to tick a confirmation checkbox
+- Cost and optional concession cost on event creation (amount + currency picker); displayed in RSVP section; `formatCost()` uses `Intl.NumberFormat` for locale-aware currency formatting
 
 ## Not yet built
 - **Real authentication** — currently mock cookie-based (user ID in cookie, no password). TODO in `src/lib/auth.ts` to replace with NextAuth + email magic-link. Do not extend the mock; ask before building auth-dependent features.
+- **Payment processing** — cost/concession fields are stored and displayed, but no payment gateway (Stripe etc.) is integrated; the cost fields are a data foundation for a future payments feature.
 - **Email notifications** — no emails sent for event approvals, RSVP confirmations, or teacher decisions
 - **Rate limiting** — API endpoints have no request throttling
 - **CI/CD and deployment config** — no GitHub Actions, Vercel config, or Dockerfile

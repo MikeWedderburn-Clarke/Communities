@@ -262,4 +262,152 @@ describe("validateEventInput", () => {
       expect(result.errors.some((e) => e.field === "recurrence.frequency")).toBe(true);
     }
   });
+
+  // ── skillLevel ────────────────────────────────────────────────────────────
+
+  it("defaults skillLevel to 'All levels' when omitted", () => {
+    const result = validateEventInput(validEvent);
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.skillLevel).toBe("All levels");
+    }
+  });
+
+  it("accepts every valid skill level", () => {
+    for (const level of ["Beginner", "Intermediate", "Advanced", "All levels"]) {
+      const result = validateEventInput({ ...validEvent, skillLevel: level });
+      expect(result.valid).toBe(true);
+      if (result.valid) {
+        expect(result.data.skillLevel).toBe(level);
+      }
+    }
+  });
+
+  it("rejects an unrecognised skill level", () => {
+    const result = validateEventInput({ ...validEvent, skillLevel: "Expert" } as any);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "skillLevel")).toBe(true);
+    }
+  });
+
+  // ── prerequisites ─────────────────────────────────────────────────────────
+
+  it("accepts a valid prerequisites string", () => {
+    const result = validateEventInput({ ...validEvent, prerequisites: "• Can invert\n• 6 months experience" });
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.prerequisites).toBe("• Can invert\n• 6 months experience");
+    }
+  });
+
+  it("stores null when prerequisites is omitted", () => {
+    const result = validateEventInput(validEvent);
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.prerequisites).toBeNull();
+    }
+  });
+
+  it("stores null when prerequisites is empty string", () => {
+    const result = validateEventInput({ ...validEvent, prerequisites: "" });
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.prerequisites).toBeNull();
+    }
+  });
+
+  it("rejects prerequisites over 2000 characters", () => {
+    const result = validateEventInput({ ...validEvent, prerequisites: "x".repeat(2001) });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "prerequisites")).toBe(true);
+    }
+  });
+
+  // ── cost ──────────────────────────────────────────────────────────────────
+
+  it("accepts a valid cost with currency", () => {
+    const result = validateEventInput({ ...validEvent, costAmount: 10, costCurrency: "GBP" });
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.costAmount).toBe(10);
+      expect(result.data.costCurrency).toBe("GBP");
+    }
+  });
+
+  it("stores null cost fields when omitted", () => {
+    const result = validateEventInput(validEvent);
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.costAmount).toBeNull();
+      expect(result.data.costCurrency).toBeNull();
+    }
+  });
+
+  it("rejects a negative costAmount", () => {
+    const result = validateEventInput({ ...validEvent, costAmount: -5, costCurrency: "GBP" });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "costAmount")).toBe(true);
+    }
+  });
+
+  it("requires costCurrency when costAmount is set", () => {
+    const result = validateEventInput({ ...validEvent, costAmount: 10 });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "costCurrency")).toBe(true);
+    }
+  });
+
+  it("normalises costCurrency to uppercase", () => {
+    const result = validateEventInput({ ...validEvent, costAmount: 10, costCurrency: "gbp" });
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.costCurrency).toBe("GBP");
+    }
+  });
+
+  it("accepts zero as a valid costAmount (free but explicit)", () => {
+    const result = validateEventInput({ ...validEvent, costAmount: 0, costCurrency: "GBP" });
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.costAmount).toBe(0);
+    }
+  });
+
+  // ── concessionAmount ──────────────────────────────────────────────────────
+
+  it("accepts a concession amount when cost is set", () => {
+    const result = validateEventInput({ ...validEvent, costAmount: 15, costCurrency: "GBP", concessionAmount: 10 });
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.concessionAmount).toBe(10);
+    }
+  });
+
+  it("rejects concessionAmount when no costAmount is given", () => {
+    const result = validateEventInput({ ...validEvent, concessionAmount: 5 });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "concessionAmount")).toBe(true);
+    }
+  });
+
+  it("rejects a negative concessionAmount", () => {
+    const result = validateEventInput({ ...validEvent, costAmount: 15, costCurrency: "GBP", concessionAmount: -1 });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "concessionAmount")).toBe(true);
+    }
+  });
+
+  it("stores null concessionAmount when omitted", () => {
+    const result = validateEventInput({ ...validEvent, costAmount: 15, costCurrency: "GBP" });
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.concessionAmount).toBeNull();
+    }
+  });
 });
