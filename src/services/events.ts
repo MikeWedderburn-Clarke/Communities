@@ -2,7 +2,7 @@ import { eq, and, gte, isNotNull, or, ne } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "@/db/schema";
 import { computeNextOccurrence } from "@/lib/recurrence";
-import type { EventSummary, EventDetail, RoleCounts, Role, TeacherRequest, PendingEvent, EventStatus, CreateEventInput, Location, RecurrenceRule } from "@/types";
+import type { EventSummary, EventDetail, RoleCounts, Role, SkillLevel, TeacherRequest, PendingEvent, EventStatus, CreateEventInput, Location, RecurrenceRule } from "@/types";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -85,6 +85,11 @@ type EventListRow = {
   locationHowToFind: string | null;
   dateAdded: string;
   lastUpdated: string;
+  skillLevel: SkillLevel;
+  prerequisites: string | null;
+  costAmount: number | null;
+  costCurrency: string | null;
+  concessionAmount: number | null;
   rsvpRole: string | null;
   rsvpIsTeaching: boolean | null;
 };
@@ -122,6 +127,11 @@ function groupEventRows(rows: EventListRow[]): EventSummary[] {
         teacherCount: 0,
         dateAdded: row.dateAdded,
         lastUpdated: row.lastUpdated,
+        skillLevel: row.skillLevel,
+        prerequisites: row.prerequisites,
+        costAmount: row.costAmount,
+        costCurrency: row.costCurrency,
+        concessionAmount: row.concessionAmount,
       });
     }
     if (row.rsvpRole !== null) {
@@ -170,6 +180,11 @@ const EVENT_LIST_SELECT = (s: typeof schema) => ({
   locationHowToFind: s.locations.howToFind,
   dateAdded: s.events.dateAdded,
   lastUpdated: s.events.lastUpdated,
+  skillLevel: s.events.skillLevel,
+  prerequisites: s.events.prerequisites,
+  costAmount: s.events.costAmount,
+  costCurrency: s.events.costCurrency,
+  concessionAmount: s.events.concessionAmount,
   rsvpRole: s.rsvps.role,
   rsvpIsTeaching: s.rsvps.isTeaching,
 });
@@ -227,6 +242,11 @@ export async function getEventDetail(
       status: schema.events.status,
       dateAdded: schema.events.dateAdded,
       lastUpdated: schema.events.lastUpdated,
+      skillLevel: schema.events.skillLevel,
+      prerequisites: schema.events.prerequisites,
+      costAmount: schema.events.costAmount,
+      costCurrency: schema.events.costCurrency,
+      concessionAmount: schema.events.concessionAmount,
       locationId: schema.locations.id,
       locationName: schema.locations.name,
       locationCity: schema.locations.city,
@@ -308,6 +328,11 @@ export async function getEventDetail(
     teacherCount: rsvpRows.filter((r) => r.isTeaching).length,
     visibleAttendees: visible,
     currentUserRsvp,
+    skillLevel: eventRow.skillLevel as SkillLevel,
+    prerequisites: eventRow.prerequisites,
+    costAmount: eventRow.costAmount,
+    costCurrency: eventRow.costCurrency,
+    concessionAmount: eventRow.concessionAmount,
   };
 }
 
@@ -423,6 +448,11 @@ export async function createEvent(
     locationId: input.locationId,
       recurrenceType: input.recurrence?.frequency ?? "none",
       recurrenceEndDate: input.recurrence?.endDate ?? null,
+    skillLevel: input.skillLevel,
+    prerequisites: input.prerequisites,
+    costAmount: input.costAmount,
+    costCurrency: input.costCurrency,
+    concessionAmount: input.concessionAmount,
     status,
     createdBy,
     dateAdded: now,

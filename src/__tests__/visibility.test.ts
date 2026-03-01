@@ -339,6 +339,11 @@ describe("event creation and approval flow", () => {
     endDateTime: "2026-05-01T12:00:00Z",
     locationId: "loc-test",
     recurrence: null,
+    skillLevel: "All levels" as const,
+    prerequisites: null,
+    costAmount: null,
+    costCurrency: null,
+    concessionAmount: null,
   };
 
   it("admin-created events are auto-approved", async () => {

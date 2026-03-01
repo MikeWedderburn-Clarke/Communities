@@ -54,7 +54,12 @@ sqlite.exec(`
     date_added TEXT NOT NULL,
     last_updated TEXT NOT NULL,
     recurrence_type TEXT NOT NULL DEFAULT 'none' CHECK(recurrence_type IN ('none','daily','weekly','monthly')),
-    recurrence_end_date TEXT
+    recurrence_end_date TEXT,
+    skill_level TEXT NOT NULL DEFAULT 'All levels' CHECK(skill_level IN ('Beginner','Intermediate','Advanced','All levels')),
+    prerequisites TEXT,
+    cost_amount REAL,
+    cost_currency TEXT,
+    concession_amount REAL
   );
   CREATE TABLE IF NOT EXISTS rsvps (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -167,6 +172,11 @@ const seedEvents = [
     lastUpdated: "2026-03-01T09:00:00Z",
     recurrenceType: "weekly",
     recurrenceEndDate: "2026-06-30T23:59:59Z",
+    skillLevel: "All levels",
+    prerequisites: null,
+    costAmount: null,
+    costCurrency: null,
+    concessionAmount: null,
   },
   {
     id: "evt-beginner-workshop",
@@ -178,6 +188,11 @@ const seedEvents = [
     locationId: "loc-gym-brixton",
     dateAdded: "2026-02-16T08:00:00Z",
     lastUpdated: "2026-03-07T10:00:00Z",
+    skillLevel: "Beginner",
+    prerequisites: null,
+    costAmount: 15,
+    costCurrency: "GBP",
+    concessionAmount: 10,
   },
   {
     id: "evt-flight-night",
@@ -189,6 +204,11 @@ const seedEvents = [
     locationId: "loc-colombo",
     dateAdded: "2026-02-17T08:00:00Z",
     lastUpdated: "2026-03-04T10:30:00Z",
+    skillLevel: "Intermediate",
+    prerequisites: "• Comfortable holding bird pose for 10 seconds\n• Confident base in basic L-basing",
+    costAmount: 8,
+    costCurrency: "GBP",
+    concessionAmount: null,
   },
   {
     id: "evt-washing-machine",
@@ -200,6 +220,11 @@ const seedEvents = [
     locationId: "loc-laban",
     dateAdded: "2026-02-18T08:00:00Z",
     lastUpdated: "2026-03-06T11:00:00Z",
+    skillLevel: "Advanced",
+    prerequisites: "• Solid washing machine foundation (pop to Star)\n• Confident in icarian entry and exit\n• Able to safely spot a flying partner",
+    costAmount: 25,
+    costCurrency: "GBP",
+    concessionAmount: 18,
   },
   {
     id: "evt-park-jam-april",
@@ -211,6 +236,11 @@ const seedEvents = [
     locationId: "loc-victoria-park",
     dateAdded: "2026-02-20T08:00:00Z",
     lastUpdated: "2026-03-02T08:30:00Z",
+    skillLevel: "All levels",
+    prerequisites: null,
+    costAmount: null,
+    costCurrency: null,
+    concessionAmount: null,
   },
   // ── New York events (5) ──────────────────────────────────────────
   {
@@ -225,6 +255,11 @@ const seedEvents = [
     lastUpdated: "2026-03-15T09:00:00Z",
     recurrenceType: "weekly",
     recurrenceEndDate: "2026-07-01T23:59:59Z",
+    skillLevel: "All levels",
+    prerequisites: null,
+    costAmount: null,
+    costCurrency: null,
+    concessionAmount: null,
   },
   {
     id: "evt-ny-beginner-intro",
@@ -236,6 +271,11 @@ const seedEvents = [
     locationId: "loc-central-park",
     dateAdded: "2026-03-02T08:30:00Z",
     lastUpdated: "2026-03-15T09:30:00Z",
+    skillLevel: "Beginner",
+    prerequisites: null,
+    costAmount: 20,
+    costCurrency: "USD",
+    concessionAmount: 12,
   },
   {
     id: "evt-ny-prospect-flow",
@@ -247,6 +287,11 @@ const seedEvents = [
     locationId: "loc-prospect-park",
     dateAdded: "2026-03-02T09:00:00Z",
     lastUpdated: "2026-03-15T10:00:00Z",
+    skillLevel: "Intermediate",
+    prerequisites: "• At least 3 months of regular AcroYoga practice\n• Comfortable in bird and star",
+    costAmount: null,
+    costCurrency: null,
+    concessionAmount: null,
   },
   {
     id: "evt-ny-domino-sunset",
@@ -258,6 +303,11 @@ const seedEvents = [
     locationId: "loc-domino-park",
     dateAdded: "2026-03-03T09:30:00Z",
     lastUpdated: "2026-03-16T18:00:00Z",
+    skillLevel: "Intermediate",
+    prerequisites: null,
+    costAmount: null,
+    costCurrency: null,
+    concessionAmount: null,
   },
   {
     id: "evt-ny-spring-festival",
@@ -269,6 +319,11 @@ const seedEvents = [
     locationId: "loc-prospect-park",
     dateAdded: "2026-03-03T10:00:00Z",
     lastUpdated: "2026-03-16T12:00:00Z",
+    skillLevel: "All levels",
+    prerequisites: null,
+    costAmount: 45,
+    costCurrency: "USD",
+    concessionAmount: 30,
   },
   // ── Bristol events (3) ───────────────────────────────────────────
   {
@@ -283,6 +338,11 @@ const seedEvents = [
     lastUpdated: "2026-03-04T12:00:00Z",
     recurrenceType: "weekly",
     recurrenceEndDate: "2026-05-31T23:59:59Z",
+    skillLevel: "All levels",
+    prerequisites: null,
+    costAmount: null,
+    costCurrency: null,
+    concessionAmount: null,
   },
   {
     id: "evt-bristol-motion-workshop",
@@ -294,6 +354,11 @@ const seedEvents = [
     locationId: "loc-the-motion",
     dateAdded: "2026-03-03T11:30:00Z",
     lastUpdated: "2026-03-04T12:30:00Z",
+    skillLevel: "Intermediate",
+    prerequisites: "• Able to hold a stable bird as base or flyer\n• Comfortable with basic washing machine",
+    costAmount: 12,
+    costCurrency: "GBP",
+    concessionAmount: 8,
   },
   {
     id: "evt-bristol-spring-jam",
@@ -305,6 +370,11 @@ const seedEvents = [
     locationId: "loc-castle-park",
     dateAdded: "2026-03-03T12:00:00Z",
     lastUpdated: "2026-03-04T13:00:00Z",
+    skillLevel: "All levels",
+    prerequisites: null,
+    costAmount: null,
+    costCurrency: null,
+    concessionAmount: null,
   },
   // ── Bournemouth events (2) ───────────────────────────────────────
   {
@@ -317,6 +387,11 @@ const seedEvents = [
     locationId: "loc-boscombe-beach",
     dateAdded: "2026-03-05T11:00:00Z",
     lastUpdated: "2026-03-06T12:00:00Z",
+    skillLevel: "All levels",
+    prerequisites: null,
+    costAmount: null,
+    costCurrency: null,
+    concessionAmount: null,
   },
   {
     id: "evt-bournemouth-park-session",
@@ -328,11 +403,16 @@ const seedEvents = [
     locationId: "loc-shelley-park",
     dateAdded: "2026-03-05T11:30:00Z",
     lastUpdated: "2026-03-06T12:30:00Z",
+    skillLevel: "All levels",
+    prerequisites: null,
+    costAmount: null,
+    costCurrency: null,
+    concessionAmount: null,
   },
 ];
 
 const insertEvent = sqlite.prepare(
-  "INSERT OR IGNORE INTO events (id, title, description, date_time, end_date_time, location_id, status, created_by, date_added, last_updated, recurrence_type, recurrence_end_date) VALUES (?, ?, ?, ?, ?, ?, 'approved', 'user-dan', ?, ?, ?, ?)"
+  "INSERT OR IGNORE INTO events (id, title, description, date_time, end_date_time, location_id, status, created_by, date_added, last_updated, recurrence_type, recurrence_end_date, skill_level, prerequisites, cost_amount, cost_currency, concession_amount) VALUES (?, ?, ?, ?, ?, ?, 'approved', 'user-dan', ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 );
 for (const e of seedEvents) {
   insertEvent.run(
@@ -346,6 +426,11 @@ for (const e of seedEvents) {
     e.lastUpdated,
     e.recurrenceType ?? "none",
     e.recurrenceEndDate ?? null,
+    e.skillLevel ?? "All levels",
+    e.prerequisites ?? null,
+    e.costAmount ?? null,
+    e.costCurrency ?? null,
+    e.concessionAmount ?? null,
   );
 }
 

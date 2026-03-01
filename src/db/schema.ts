@@ -55,6 +55,11 @@ export const events = sqliteTable("events", {
   lastUpdated: text("last_updated").notNull(),
   recurrenceType: text("recurrence_type", { enum: ["none", "daily", "weekly", "monthly"] }).notNull().default("none"),
   recurrenceEndDate: text("recurrence_end_date"),
+  skillLevel: text("skill_level", { enum: ["Beginner", "Intermediate", "Advanced", "All levels"] }).notNull().default("All levels"),
+  prerequisites: text("prerequisites"),
+  costAmount: real("cost_amount"),
+  costCurrency: text("cost_currency"),
+  concessionAmount: real("concession_amount"),
 }, (table) => ([
   // Composite index covering the WHERE status='approved' + ORDER BY date_time
   // used by getAllEvents / getUpcomingEvents on every page load.

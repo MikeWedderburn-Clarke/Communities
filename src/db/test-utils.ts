@@ -59,7 +59,12 @@ export function createTestDb() {
       date_added TEXT NOT NULL,
       last_updated TEXT NOT NULL,
       recurrence_type TEXT NOT NULL DEFAULT 'none' CHECK(recurrence_type IN ('none','daily','weekly','monthly')),
-      recurrence_end_date TEXT
+      recurrence_end_date TEXT,
+      skill_level TEXT NOT NULL DEFAULT 'All levels' CHECK(skill_level IN ('Beginner','Intermediate','Advanced','All levels')),
+      prerequisites TEXT,
+      cost_amount REAL,
+      cost_currency TEXT,
+      concession_amount REAL
     );
     CREATE TABLE rsvps (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

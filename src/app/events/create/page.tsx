@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import type { Location } from "@/types";
+import { SKILL_LEVELS, CURRENCIES, type Location, type SkillLevel } from "@/types";
 
 /* ── Nominatim geocoding types ────────────────────────────────── */
 interface NominatimResult {
@@ -55,6 +55,13 @@ export default function CreateEventPage() {
   const [eventDate, setEventDate] = useState(tomorrowIso);
   const [recurrenceMode, setRecurrenceMode] = useState<RecurrenceOption>("none");
   const [recurrenceEndDate, setRecurrenceEndDate] = useState("");
+
+  // New event fields
+  const [skillLevel, setSkillLevel] = useState<SkillLevel>("All levels");
+  const [prerequisites, setPrerequisites] = useState("");
+  const [costAmount, setCostAmount] = useState("");
+  const [costCurrency, setCostCurrency] = useState("GBP");
+  const [concessionAmount, setConcessionAmount] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -177,6 +184,21 @@ export default function CreateEventPage() {
     }
   }
 
+  function handlePrereqKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const ta = e.currentTarget;
+    const { selectionStart, selectionEnd, value } = ta;
+    const before = value.slice(0, selectionStart);
+    const after = value.slice(selectionEnd);
+    const insert = "\n• ";
+    const next = before + insert + after;
+    setPrerequisites(next);
+    requestAnimationFrame(() => {
+      ta.selectionStart = ta.selectionEnd = selectionStart + insert.length;
+    });
+  }
+
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!selectedLocation) {
@@ -208,6 +230,11 @@ export default function CreateEventPage() {
       endDateTime,
       locationId: selectedLocation.id,
       recurrence,
+      skillLevel,
+      prerequisites: prerequisites.trim() || null,
+      costAmount: costAmount !== "" ? parseFloat(costAmount) : null,
+      costCurrency: costAmount !== "" ? costCurrency : null,
+      concessionAmount: concessionAmount !== "" ? parseFloat(concessionAmount) : null,
     };
 
     try {
@@ -289,6 +316,93 @@ export default function CreateEventPage() {
             className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
             placeholder="What's the event about? Level, what to bring, etc."
           />
+        </div>
+
+        {/* Skill level */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Skill level</label>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {SKILL_LEVELS.map((level) => (
+              <button
+                key={level}
+                type="button"
+                onClick={() => setSkillLevel(level)}
+                className={`rounded-full border px-3 py-1 text-sm transition ${
+                  skillLevel === level
+                    ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                    : "border-gray-200 hover:border-gray-300"
+                }`}
+              >
+                {level}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Prerequisites */}
+        <div>
+          <label htmlFor="prerequisites" className="block text-sm font-medium text-gray-700">
+            Prerequisites <span className="font-normal text-gray-400">(optional)</span>
+          </label>
+          <textarea
+            id="prerequisites"
+            rows={3}
+            value={prerequisites}
+            onFocus={() => { if (prerequisites === "") setPrerequisites("• "); }}
+            onChange={(e) => setPrerequisites(e.target.value)}
+            onKeyDown={handlePrereqKeyDown}
+            maxLength={2000}
+            className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+            placeholder="• e.g. Comfortable in bird pose"
+          />
+          <p className="mt-1 text-xs text-gray-500">Press Enter to add a new bullet. Attendees must confirm they meet these before signing up.</p>
+        </div>
+
+        {/* Cost */}
+        <div className="rounded-lg border border-gray-200 bg-white/60 p-4 space-y-3">
+          <p className="text-sm font-medium text-gray-700">Cost <span className="font-normal text-gray-400">(optional — leave blank for free events)</span></p>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <label htmlFor="costAmount" className="block text-sm text-gray-600">Amount</label>
+              <input
+                id="costAmount"
+                type="number"
+                min="0"
+                step="0.01"
+                value={costAmount}
+                onChange={(e) => setCostAmount(e.target.value)}
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                placeholder="e.g. 10"
+              />
+            </div>
+            <div>
+              <label htmlFor="costCurrency" className="block text-sm text-gray-600">Currency</label>
+              <select
+                id="costCurrency"
+                value={costCurrency}
+                onChange={(e) => setCostCurrency(e.target.value)}
+                disabled={costAmount === ""}
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:bg-gray-100"
+              >
+                {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label htmlFor="concessionAmount" className="block text-sm text-gray-600">Concession amount <span className="text-gray-400">(optional)</span></label>
+            <input
+              id="concessionAmount"
+              type="number"
+              min="0"
+              step="0.01"
+              value={concessionAmount}
+              onChange={(e) => setConcessionAmount(e.target.value)}
+              disabled={costAmount === ""}
+              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:bg-gray-100"
+              placeholder="e.g. 7"
+            />
+            <p className="mt-1 text-xs text-gray-500">Reduced rate for students, unwaged, etc.</p>
+          </div>
         </div>
 
         {/* Date + Times */}

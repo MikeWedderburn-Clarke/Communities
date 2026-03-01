@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ROLES, type Role } from "@/types";
+import { formatCost } from "@/lib/format-cost";
 
 interface Props {
   eventId: string;
@@ -11,20 +12,31 @@ interface Props {
   isTeacherApproved: boolean;
   defaultRole: Role | null;
   defaultShowName: boolean | null;
+  prerequisites: string | null;
+  costAmount: number | null;
+  costCurrency: string | null;
+  concessionAmount: number | null;
 }
 
-export function RsvpForm({ eventId, currentRsvp, isTeacherApproved, defaultRole, defaultShowName }: Props) {
+export function RsvpForm({ eventId, currentRsvp, isTeacherApproved, defaultRole, defaultShowName, prerequisites, costAmount, costCurrency, concessionAmount }: Props) {
   const router = useRouter();
   const [role, setRole] = useState<Role>(currentRsvp?.role ?? defaultRole ?? "Base");
   const [showName, setShowName] = useState(currentRsvp?.showName ?? defaultShowName ?? true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isTeaching, setIsTeaching] = useState(currentRsvp?.isTeaching ?? false);
+  const [metPrereqs, setMetPrereqs] = useState(currentRsvp !== null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+
+    if (prerequisites && !metPrereqs) {
+      setError("Please confirm you meet the prerequisites for this event.");
+      setSubmitting(false);
+      return;
+    }
 
     const res = await fetch("/api/rsvp", {
       method: "POST",
@@ -66,6 +78,17 @@ export function RsvpForm({ eventId, currentRsvp, isTeacherApproved, defaultRole,
 
   return (
     <form onSubmit={handleSubmit} className="mt-3 space-y-4">
+      {/* Cost info — read-only reminder */}
+      {costAmount !== null && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+          <span className="font-medium">Cost:</span>{" "}
+          {formatCost(costAmount, costCurrency)}
+          {concessionAmount !== null && (
+            <span className="text-gray-500"> · {formatCost(concessionAmount, costCurrency)} concession</span>
+          )}
+        </div>
+      )}
+
       <fieldset>
         <legend className="text-sm font-medium text-gray-700">
           Your role
@@ -130,6 +153,19 @@ export function RsvpForm({ eventId, currentRsvp, isTeacherApproved, defaultRole,
           </Link>{" "}
           on your profile.
         </p>
+      )}
+
+      {/* Prerequisites confirmation — only shown when event has prerequisites */}
+      {prerequisites && (
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={metPrereqs}
+            onChange={(e) => setMetPrereqs(e.target.checked)}
+            className="mt-0.5 rounded border-gray-300"
+          />
+          <span>I confirm I meet the prerequisites for this event</span>
+        </label>
       )}
 
       {error && (

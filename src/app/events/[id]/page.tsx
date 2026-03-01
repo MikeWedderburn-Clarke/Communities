@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { buildExternalMapLinks } from "@/lib/map-links";
 import { isEventFresh } from "@/lib/event-utils";
 import { formatRecurrenceSummary } from "@/lib/recurrence";
+import { formatCost } from "@/lib/format-cost";
 import { db } from "@/db";
 import { RsvpForm } from "./rsvp-form";
 import Link from "next/link";
@@ -66,6 +67,14 @@ export default async function EventDetailPage({
               New since your last login
             </span>
           )}
+          <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+            event.skillLevel === "Beginner" ? "bg-green-100 text-green-700" :
+            event.skillLevel === "Intermediate" ? "bg-yellow-100 text-yellow-700" :
+            event.skillLevel === "Advanced" ? "bg-rose-100 text-rose-700" :
+            "bg-indigo-100 text-indigo-700"
+          }`}>
+            {event.skillLevel}
+          </span>
           <p className="text-xs text-gray-500">
             Added {formatCompactDate(event.dateAdded)}
             {event.dateAdded !== event.lastUpdated && (
@@ -112,6 +121,18 @@ export default async function EventDetailPage({
           {event.description}
         </p>
 
+        {/* Prerequisites */}
+        {event.prerequisites && (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <h2 className="text-sm font-semibold text-amber-800">Prerequisites</h2>
+            <ul className="mt-2 space-y-1 text-sm text-amber-900">
+              {event.prerequisites.split("\n").filter(Boolean).map((line, i) => (
+                <li key={i}>{line}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Attendance summary — always visible */}
         <section className="mt-8 rounded-lg border border-gray-200 bg-white p-5">
           <h2 className="font-semibold">
@@ -157,6 +178,18 @@ export default async function EventDetailPage({
 
         {/* RSVP section */}
         <section className="mt-6 rounded-lg border border-gray-200 bg-white p-5">
+          {/* Cost — always visible */}
+          {event.costAmount !== null && (
+            <p className="mb-4 text-sm font-medium text-gray-700">
+              Cost:{" "}
+              <span className="text-gray-900">{formatCost(event.costAmount, event.costCurrency)}</span>
+              {event.concessionAmount !== null && (
+                <span className="ml-2 text-gray-500">
+                  ({formatCost(event.concessionAmount, event.costCurrency)} concession)
+                </span>
+              )}
+            </p>
+          )}
           {user ? (
             <>
               <h2 className="font-semibold">
@@ -168,6 +201,10 @@ export default async function EventDetailPage({
                 isTeacherApproved={user?.isTeacherApproved ?? false}
                 defaultRole={user?.defaultRole ?? null}
                 defaultShowName={user?.defaultShowName ?? null}
+                prerequisites={event.prerequisites}
+                costAmount={event.costAmount}
+                costCurrency={event.costCurrency}
+                concessionAmount={event.concessionAmount}
               />
             </>
           ) : (

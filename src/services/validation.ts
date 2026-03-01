@@ -1,4 +1,4 @@
-import { ROLES, RECURRENCE_FREQUENCIES, type Role, type CreateEventInput, type CreateLocationInput, type RecurrenceRule } from "@/types";
+import { ROLES, RECURRENCE_FREQUENCIES, SKILL_LEVELS, type Role, type SkillLevel, type CreateEventInput, type CreateLocationInput, type RecurrenceRule } from "@/types";
 
 export interface ValidationError {
   field: string;
@@ -136,6 +136,69 @@ export function validateEventInput(body: unknown): {
     return { valid: false, errors };
   }
 
+  // ── New fields ──────────────────────────────────────────────────
+
+  // skillLevel — optional, defaults to "All levels"
+  let skillLevel: SkillLevel = "All levels";
+  if (obj.skillLevel !== undefined && obj.skillLevel !== null) {
+    if (!(SKILL_LEVELS as readonly string[]).includes(obj.skillLevel as string)) {
+      errors.push({ field: "skillLevel", message: `skillLevel must be one of: ${SKILL_LEVELS.join(", ")}` });
+    } else {
+      skillLevel = obj.skillLevel as SkillLevel;
+    }
+  }
+
+  // prerequisites — optional string, max 2000 chars
+  let prerequisites: string | null = null;
+  if (obj.prerequisites !== undefined && obj.prerequisites !== null && obj.prerequisites !== "") {
+    if (typeof obj.prerequisites !== "string") {
+      errors.push({ field: "prerequisites", message: "prerequisites must be a string" });
+    } else {
+      const trimmed = obj.prerequisites.trim();
+      if (trimmed.length > 2000) {
+        errors.push({ field: "prerequisites", message: "prerequisites must be 2000 characters or less" });
+      } else {
+        prerequisites = trimmed || null;
+      }
+    }
+  }
+
+  // costAmount — optional non-negative number
+  let costAmount: number | null = null;
+  if (obj.costAmount !== undefined && obj.costAmount !== null) {
+    if (typeof obj.costAmount !== "number" || obj.costAmount < 0) {
+      errors.push({ field: "costAmount", message: "costAmount must be a non-negative number" });
+    } else {
+      costAmount = obj.costAmount;
+    }
+  }
+
+  // costCurrency — required when costAmount is set
+  let costCurrency: string | null = null;
+  if (costAmount !== null) {
+    if (typeof obj.costCurrency !== "string" || obj.costCurrency.trim() === "") {
+      errors.push({ field: "costCurrency", message: "costCurrency is required when costAmount is set" });
+    } else {
+      costCurrency = obj.costCurrency.trim().toUpperCase();
+    }
+  }
+
+  // concessionAmount — optional, non-negative, only valid when costAmount present
+  let concessionAmount: number | null = null;
+  if (obj.concessionAmount !== undefined && obj.concessionAmount !== null) {
+    if (costAmount === null) {
+      errors.push({ field: "concessionAmount", message: "concessionAmount requires costAmount to be set" });
+    } else if (typeof obj.concessionAmount !== "number" || obj.concessionAmount < 0) {
+      errors.push({ field: "concessionAmount", message: "concessionAmount must be a non-negative number" });
+    } else {
+      concessionAmount = obj.concessionAmount;
+    }
+  }
+
+  if (errors.length > 0) {
+    return { valid: false, errors };
+  }
+
   return {
     valid: true,
     data: {
@@ -145,6 +208,11 @@ export function validateEventInput(body: unknown): {
       endDateTime: (obj.endDateTime as string).trim(),
       locationId: (obj.locationId as string).trim(),
       recurrence,
+      skillLevel,
+      prerequisites,
+      costAmount,
+      costCurrency,
+      concessionAmount,
     },
   };
 }

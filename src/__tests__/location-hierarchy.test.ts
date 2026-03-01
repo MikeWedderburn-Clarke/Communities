@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildLocationHierarchy } from "@/lib/location-hierarchy";
-import type { EventSummary, Location } from "@/types";
+import type { EventSummary, Location, SkillLevel } from "@/types";
 
 function makeLocation(overrides: Partial<Location> = {}): Location {
   return {
@@ -30,6 +30,11 @@ function makeEvent(overrides: Omit<Partial<EventSummary>, "location"> & { id: st
     lastUpdated: "2026-01-01T00:00:00Z",
     recurrence: null,
     nextOccurrence: null,
+    skillLevel: "All levels" as SkillLevel,
+    prerequisites: null,
+    costAmount: null,
+    costCurrency: null,
+    concessionAmount: null,
     ...overrides,
     location,
   } as EventSummary;

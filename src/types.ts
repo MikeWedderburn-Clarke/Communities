@@ -10,6 +10,12 @@ export type RoleCounts = Record<Role, number>;
 export const RECURRENCE_FREQUENCIES = ["none", "daily", "weekly", "monthly"] as const;
 export type RecurrenceFrequency = (typeof RECURRENCE_FREQUENCIES)[number];
 
+export const SKILL_LEVELS = ["Beginner", "Intermediate", "Advanced", "All levels"] as const;
+export type SkillLevel = (typeof SKILL_LEVELS)[number];
+
+export const CURRENCIES = ["GBP", "USD", "EUR", "CAD", "AUD", "NZD", "CHF", "SEK", "NOK", "DKK"] as const;
+export type Currency = (typeof CURRENCIES)[number];
+
 export interface RecurrenceRule {
   frequency: RecurrenceFrequency;
   /** ISO-8601 date inclusive; null means no end date */
@@ -61,6 +67,11 @@ export interface EventSummary {
   recurrence: RecurrenceRule | null;
   /** Next upcoming occurrence relative to "now" if applicable */
   nextOccurrence: EventOccurrence | null;
+  skillLevel: SkillLevel;
+  prerequisites: string | null;
+  costAmount: number | null;
+  costCurrency: string | null;
+  concessionAmount: number | null;
 }
 
 export interface EventDetail extends EventSummary {
@@ -149,6 +160,11 @@ export interface CreateEventInput {
   endDateTime: string; // ISO-8601
   locationId: string;
   recurrence: RecurrenceRule | null;
+  skillLevel: SkillLevel;
+  prerequisites: string | null;
+  costAmount: number | null;
+  costCurrency: string | null;
+  concessionAmount: number | null;
 }
 
 /** Pending event for admin review. */
