@@ -10,25 +10,29 @@ function makeLocation(overrides: Partial<Location> = {}): Location {
     country: "United Kingdom",
     latitude: 51.5074,
     longitude: -0.1278,
+    what3names: null,
+    howToFind: null,
     ...overrides,
-  };
+  } as Location;
 }
 
-function makeEvent(overrides: Partial<EventSummary> & { id: string } & { location?: Partial<Location> & { name: string; city: string; country: string } }): EventSummary {
+function makeEvent(overrides: Omit<Partial<EventSummary>, "location"> & { id: string } & { location?: Partial<Location> & { name: string; city: string; country: string } }): EventSummary {
   const location = makeLocation(overrides.location);
   return {
     title: "Test Event",
     description: "desc",
     dateTime: "2026-03-01T10:00:00Z",
     endDateTime: "2026-03-01T12:00:00Z",
-    location,
     attendeeCount: 0,
     roleCounts: { Base: 0, Flyer: 0, Hybrid: 0 },
     teacherCount: 0,
+    dateAdded: "2026-01-01T00:00:00Z",
+    lastUpdated: "2026-01-01T00:00:00Z",
+    recurrence: null,
+    nextOccurrence: null,
     ...overrides,
-    // ensure location override is applied as a Location object
-    ...(overrides.location ? { location } : {}),
-  };
+    location,
+  } as EventSummary;
 }
 
 describe("buildLocationHierarchy", () => {

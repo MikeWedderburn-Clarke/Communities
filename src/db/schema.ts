@@ -23,6 +23,7 @@ export const users = sqliteTable("users", {
   // Home city
   homeCity: text("home_city"),
   useCurrentLocation: integer("use_current_location", { mode: "boolean" }).notNull().default(false),
+  lastLogin: text("last_login"),
 });
 
 export const locations = sqliteTable("locations", {
@@ -32,6 +33,8 @@ export const locations = sqliteTable("locations", {
   country: text("country").notNull(),
   latitude: real("latitude").notNull(),
   longitude: real("longitude").notNull(),
+  what3names: text("what3names"),
+  howToFind: text("how_to_find"),
   createdBy: text("created_by").references(() => users.id),
 }, (table) => ([
   uniqueIndex("locations_name_city_country_unique").on(table.name, table.city, table.country),
@@ -48,6 +51,10 @@ export const events = sqliteTable("events", {
     .references(() => locations.id),
   status: text("status", { enum: ["approved", "pending", "rejected"] }).notNull().default("pending"),
   createdBy: text("created_by").references(() => users.id),
+  dateAdded: text("date_added").notNull(),
+  lastUpdated: text("last_updated").notNull(),
+  recurrenceType: text("recurrence_type", { enum: ["none", "daily", "weekly", "monthly"] }).notNull().default("none"),
+  recurrenceEndDate: text("recurrence_end_date"),
 }, (table) => ([
   // Composite index covering the WHERE status='approved' + ORDER BY date_time
   // used by getAllEvents / getUpcomingEvents on every page load.

@@ -49,6 +49,7 @@ describe("getUserProfile", () => {
       defaultShowName: true,
       homeCity: null,
       useCurrentLocation: false,
+      lastLogin: null,
       facebookUrl: "https://facebook.com/alice",
       instagramUrl: "https://instagram.com/alice",
       websiteUrl: "https://alice.dev",
@@ -130,6 +131,8 @@ describe("updateUserProfile", () => {
       showInstagram: true,
       showWebsite: false,
       showYoutube: true,
+      homeCity: null,
+      useCurrentLocation: false,
     });
 
     const profile = await getUserProfile(db, "u1");
@@ -158,6 +161,8 @@ describe("updateUserProfile", () => {
       showInstagram: true,
       showWebsite: false,
       showYoutube: true,
+      homeCity: null,
+      useCurrentLocation: false,
     });
 
     const pub = await getPublicProfile(db, "u1");

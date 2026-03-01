@@ -7,6 +7,20 @@ export type Role = (typeof ROLES)[number];
 /** Distribution of roles among RSVPs. */
 export type RoleCounts = Record<Role, number>;
 
+export const RECURRENCE_FREQUENCIES = ["none", "daily", "weekly", "monthly"] as const;
+export type RecurrenceFrequency = (typeof RECURRENCE_FREQUENCIES)[number];
+
+export interface RecurrenceRule {
+  frequency: RecurrenceFrequency;
+  /** ISO-8601 date inclusive; null means no end date */
+  endDate: string | null;
+}
+
+export interface EventOccurrence {
+  dateTime: string;
+  endDateTime: string;
+}
+
 // ── Location ────────────────────────────────────────────────────────
 
 export interface Location {
@@ -16,6 +30,8 @@ export interface Location {
   country: string;
   latitude: number;
   longitude: number;
+  what3names: string | null;
+  howToFind: string | null;
 }
 
 export interface CreateLocationInput {
@@ -24,6 +40,8 @@ export interface CreateLocationInput {
   country: string;
   latitude: number;
   longitude: number;
+  what3names: string | null;
+  howToFind: string | null;
 }
 
 // ── API / view models ──────────────────────────────────────────────
@@ -38,6 +56,11 @@ export interface EventSummary {
   attendeeCount: number;
   roleCounts: RoleCounts;
   teacherCount: number;
+  dateAdded: string;
+  lastUpdated: string;
+  recurrence: RecurrenceRule | null;
+  /** Next upcoming occurrence relative to "now" if applicable */
+  nextOccurrence: EventOccurrence | null;
 }
 
 export interface EventDetail extends EventSummary {
@@ -71,6 +94,7 @@ export interface SessionUser {
   defaultShowName: boolean | null;
   homeCity: string | null;
   useCurrentLocation: boolean;
+  lastLogin: string | null;
 }
 
 /** Full profile for the user's own editing page. */
@@ -92,6 +116,7 @@ export interface UserProfile {
   showYoutube: boolean;
   homeCity: string | null;
   useCurrentLocation: boolean;
+  lastLogin: string | null;
 }
 
 /** Public profile visible to other logged-in users—only includes links the owner made visible. */
@@ -123,6 +148,7 @@ export interface CreateEventInput {
   dateTime: string; // ISO-8601
   endDateTime: string; // ISO-8601
   locationId: string;
+  recurrence: RecurrenceRule | null;
 }
 
 /** Pending event for admin review. */

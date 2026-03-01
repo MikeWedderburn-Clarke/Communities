@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { EventsList } from "./events-list";
 import type { EventSummary } from "@/types";
+import { EventsHierarchy } from "./events-hierarchy";
 
 const LeafletMap = dynamic(
   () => import("./leaflet-map").then((m) => m.LeafletMap),
@@ -16,10 +16,11 @@ type View = "list" | "map";
 interface Props {
   events: EventSummary[];
   initialView: View;
-  defaultCity: string | null;
+  homeCity: string | null;
+  lastLogin: string | null;
 }
 
-export function EventsContent({ events, initialView, defaultCity }: Props) {
+export function EventsContent({ events, initialView, homeCity, lastLogin }: Props) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -34,8 +35,8 @@ export function EventsContent({ events, initialView, defaultCity }: Props) {
   }, [events]);
 
   // Default to user's home city if it matches an available city, else "All"
-  const initialCity =
-    defaultCity && cities.includes(defaultCity) ? defaultCity : "";
+  const defaultCity = homeCity ?? "";
+  const initialCity = defaultCity && cities.includes(defaultCity) ? defaultCity : "";
   const [selectedCity, setSelectedCity] = useState(initialCity);
 
   const filteredEvents = useMemo(
@@ -82,28 +83,13 @@ export function EventsContent({ events, initialView, defaultCity }: Props) {
           ))}
         </div>
 
-        {cities.length > 1 && (
-          <select
-            value={selectedCity}
-            onChange={(e) => setSelectedCity(e.target.value)}
-            className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 hover:border-gray-300"
-          >
-            <option value="">All cities ({events.length})</option>
-            {cities.map((c) => {
-              const count = events.filter((e) => e.location.city === c).length;
-              return (
-                <option key={c} value={c}>
-                  {c} ({count})
-                </option>
-              );
-            })}
-          </select>
-        )}
       </div>
 
-      {view === "list" && <EventsList events={filteredEvents} />}
+      {view === "list" && (
+        <EventsHierarchy events={events} homeCity={homeCity} lastLogin={lastLogin} />
+      )}
       {view === "map" && (
-        <LeafletMap events={filteredEvents} homeCity={selectedCity || null} />
+        <LeafletMap events={events} homeCity={homeCity} userLastLogin={lastLogin} />
       )}
     </>
   );

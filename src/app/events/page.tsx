@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import { Header } from "@/components/header";
 import { EventsContent } from "./events-content";
 import { getAllEvents } from "@/services/events";
 import { getCurrentUser } from "@/lib/auth";
@@ -16,13 +15,11 @@ export default async function EventsPage({ searchParams }: Props) {
   const events = await getAllEvents(db);
   const user = await getCurrentUser();
   const initialView = view === "map" ? "map" : "list";
-  // Use city from query param, fall back to user's home city
-  const defaultCity = city ?? user?.homeCity ?? null;
+  const homeCity = city ?? user?.homeCity ?? null;
+  const lastLogin = user?.lastLogin ?? null;
 
   return (
-    <>
-      <Header />
-      <main className="mx-auto max-w-4xl px-4 py-8">
+    <main className="mx-auto max-w-4xl px-4 py-8">
         <h1 className="text-3xl font-bold">Upcoming Events</h1>
         <p className="mt-1 text-gray-600">
           AcroYoga jams, workshops, and meetups
@@ -32,10 +29,10 @@ export default async function EventsPage({ searchParams }: Props) {
           <EventsContent
             events={events}
             initialView={initialView}
-            defaultCity={defaultCity}
+            homeCity={homeCity}
+            lastLogin={lastLogin}
           />
         </Suspense>
-      </main>
-    </>
+    </main>
   );
 }

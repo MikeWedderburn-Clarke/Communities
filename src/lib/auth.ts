@@ -39,6 +39,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     defaultShowName: user.defaultShowName ?? null,
     homeCity: user.homeCity ?? null,
     useCurrentLocation: user.useCurrentLocation,
+    lastLogin: user.lastLogin ?? null,
   };
 }
 
@@ -72,5 +73,6 @@ export async function getMockUsers(): Promise<SessionUser[]> {
     defaultShowName: u.defaultShowName ?? null,
     homeCity: u.homeCity ?? null,
     useCurrentLocation: u.useCurrentLocation,
+    lastLogin: u.lastLogin ?? null,
   }));
 }

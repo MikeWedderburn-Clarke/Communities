@@ -44,6 +44,8 @@ function seedTestData(db: TestDb) {
     endDateTime: "2026-03-08T14:00:00Z",
     locationId: "loc-test",
     status: "approved",
+    dateAdded: "2026-02-01T10:00:00Z",
+    lastUpdated: "2026-02-01T10:00:00Z",
   }).run();
 }
 
@@ -336,6 +338,7 @@ describe("event creation and approval flow", () => {
     dateTime: "2026-05-01T10:00:00Z",
     endDateTime: "2026-05-01T12:00:00Z",
     locationId: "loc-test",
+    recurrence: null,
   };
 
   it("admin-created events are auto-approved", async () => {
@@ -378,5 +381,70 @@ describe("event creation and approval flow", () => {
     await rejectEvent(db, pending[0].id);
     const pendingAfter = await getPendingEvents(db);
     expect(pendingAfter).toHaveLength(0);
+  });
+
+  it("persists recurrence metadata when provided", async () => {
+    const input = {
+      ...eventInput,
+      recurrence: { frequency: "weekly" as const, endDate: "2026-08-01T23:59:59Z" },
+    };
+    const id = await createEvent(db, input, "u-admin", true);
+    const [row] = await db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, id))
+      .limit(1);
+    expect(row?.recurrenceType).toBe("weekly");
+    expect(row?.recurrenceEndDate).toBe("2026-08-01T23:59:59Z");
+  });
+});
+
+describe("recurrence-aware listings", () => {
+  let db: TestDb;
+
+  beforeEach(() => {
+    db = createTestDb();
+    seedTestData(db);
+  });
+
+  it("omits past single events from getAllEvents", async () => {
+    db.insert(schema.events).values({
+      id: "evt-past",
+      title: "Old Jam",
+      description: "already happened",
+      dateTime: "2020-01-01T10:00:00Z",
+      endDateTime: "2020-01-01T12:00:00Z",
+      locationId: "loc-test",
+      status: "approved",
+      dateAdded: "2019-12-01T10:00:00Z",
+      lastUpdated: "2019-12-01T10:00:00Z",
+      recurrenceType: "none",
+      recurrenceEndDate: null,
+    }).run();
+
+    const events = await getAllEvents(db);
+    expect(events.some((e) => e.id === "evt-past")).toBe(false);
+  });
+
+  it("surfaces recurring events even if their first instance is past", async () => {
+    db.insert(schema.events).values({
+      id: "evt-recurring",
+      title: "Weekly Flow",
+      description: "keeps happening",
+      dateTime: "2024-01-01T10:00:00Z",
+      endDateTime: "2024-01-01T12:00:00Z",
+      locationId: "loc-test",
+      status: "approved",
+      dateAdded: "2023-12-01T10:00:00Z",
+      lastUpdated: "2023-12-01T10:00:00Z",
+      recurrenceType: "weekly",
+      recurrenceEndDate: "2026-12-31T23:59:59Z",
+    }).run();
+
+    const events = await getAllEvents(db);
+    const recurring = events.find((e) => e.id === "evt-recurring");
+    expect(recurring).toBeDefined();
+    expect(recurring?.nextOccurrence).not.toBeNull();
+    expect(recurring?.recurrence?.frequency).toBe("weekly");
   });
 });

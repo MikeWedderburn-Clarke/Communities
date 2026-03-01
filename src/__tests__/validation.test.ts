@@ -218,4 +218,48 @@ describe("validateEventInput", () => {
       expect(result.errors.length).toBeGreaterThanOrEqual(2);
     }
   });
+
+  it("accepts valid recurrence payloads", () => {
+    const result = validateEventInput({
+      ...validEvent,
+      recurrence: { frequency: "weekly", endDate: "2026-06-30T23:59:59Z" },
+    });
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.recurrence).toEqual({ frequency: "weekly", endDate: "2026-06-30T23:59:59Z" });
+    }
+  });
+
+  it("requires an end date when recurrence is enabled", () => {
+    const result = validateEventInput({
+      ...validEvent,
+      recurrence: { frequency: "weekly" },
+    });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "recurrence.endDate")).toBe(true);
+    }
+  });
+
+  it("rejects recurrence end dates earlier than the start", () => {
+    const result = validateEventInput({
+      ...validEvent,
+      recurrence: { frequency: "weekly", endDate: "2025-01-01T00:00:00Z" },
+    });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "recurrence.endDate")).toBe(true);
+    }
+  });
+
+  it("rejects recurrence frequency outside the allowed list", () => {
+    const result = validateEventInput({
+      ...validEvent,
+      recurrence: { frequency: "hourly", endDate: "2026-06-30T23:59:59Z" },
+    } as any);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "recurrence.frequency")).toBe(true);
+    }
+  });
 });

@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { getMockUsers, setSessionCookie } from "@/lib/auth";
+import { recordLastLogin } from "@/services/users";
+import { db } from "@/db";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,7 @@ export default async function LoginPage({
     const userId = formData.get("userId") as string;
     if (!userId) return;
     await setSessionCookie(userId);
+    await recordLastLogin(db, userId);
     redirect(redirectTo);
   }
 

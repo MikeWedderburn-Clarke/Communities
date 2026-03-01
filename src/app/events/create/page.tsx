@@ -29,6 +29,7 @@ export default function CreateEventPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const tomorrowIso = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
 
   // Location state
   const [locations, setLocations] = useState<Location[]>([]);
@@ -48,7 +49,13 @@ export default function CreateEventPage() {
   const [newLocCountry, setNewLocCountry] = useState("");
   const [newLocLat, setNewLocLat] = useState("");
   const [newLocLng, setNewLocLng] = useState("");
+  const [newLocWhat3, setNewLocWhat3] = useState("");
+  const [newLocDirections, setNewLocDirections] = useState("");
   const geoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  type RecurrenceOption = "none" | "daily" | "weekly" | "monthly";
+  const [eventDate, setEventDate] = useState(tomorrowIso);
+  const [recurrenceMode, setRecurrenceMode] = useState<RecurrenceOption>("none");
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -109,12 +116,15 @@ export default function CreateEventPage() {
     setCreatingLocation(true);
     setError(null);
 
+    const normalizedWhat3 = newLocWhat3.trim().replace(/\s+/g, ".");
     const body = {
       name: newLocName,
       city: newLocCity,
       country: newLocCountry,
       latitude: parseFloat(newLocLat),
       longitude: parseFloat(newLocLng),
+      what3names: normalizedWhat3 === "" ? null : normalizedWhat3,
+      howToFind: newLocDirections.trim() === "" ? null : newLocDirections.trim(),
     };
 
     try {
@@ -135,6 +145,8 @@ export default function CreateEventPage() {
         country: body.country,
         latitude: body.latitude,
         longitude: body.longitude,
+        what3names: body.what3names,
+        howToFind: body.howToFind,
       };
       setSelectedLocation(newLoc);
       setShowNewLocation(false);
@@ -147,6 +159,8 @@ export default function CreateEventPage() {
       setNewLocCountry("");
       setNewLocLat("");
       setNewLocLng("");
+      setNewLocWhat3("");
+      setNewLocDirections("");
     } catch {
       setError("Network error creating location");
     } finally {
@@ -168,12 +182,23 @@ export default function CreateEventPage() {
     const dateTime = `${form.get("date")}T${form.get("startTime")}:00Z`;
     const endDateTime = `${form.get("date")}T${form.get("endTime")}:00Z`;
 
+    const recurrenceFrequency = (form.get("recurrenceFrequency") as string) ?? "none";
+    const recurrenceEndRaw = (form.get("recurrenceEndDate") as string) ?? "";
+    const recurrence =
+      recurrenceFrequency !== "none"
+        ? {
+            frequency: recurrenceFrequency,
+            endDate: recurrenceEndRaw ? `${recurrenceEndRaw}T23:59:59Z` : null,
+          }
+        : null;
+
     const body = {
       title: form.get("title"),
       description: form.get("description"),
       dateTime,
       endDateTime,
       locationId: selectedLocation.id,
+      recurrence,
     };
 
     try {
@@ -204,9 +229,6 @@ export default function CreateEventPage() {
       setSubmitting(false);
     }
   }
-
-  // Default date to tomorrow
-  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
@@ -271,7 +293,14 @@ export default function CreateEventPage() {
               name="date"
               type="date"
               required
-              defaultValue={tomorrow}
+              value={eventDate}
+              onChange={(e) => {
+                const nextDate = e.target.value;
+                setEventDate(nextDate);
+                if (recurrenceEndDate && nextDate && recurrenceEndDate < nextDate) {
+                  setRecurrenceEndDate(nextDate);
+                }
+              }}
               className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
             />
           </div>
@@ -300,6 +329,54 @@ export default function CreateEventPage() {
               defaultValue="12:00"
               className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
             />
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-gray-200 bg-white/60 p-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="recurrenceFrequency" className="block text-sm font-medium text-gray-700">
+                Repeats
+              </label>
+              <select
+                id="recurrenceFrequency"
+                name="recurrenceFrequency"
+                value={recurrenceMode}
+                onChange={(e) => {
+                  const next = e.target.value as RecurrenceOption;
+                  setRecurrenceMode(next);
+                  if (next === "none") {
+                    setRecurrenceEndDate("");
+                  } else if (!recurrenceEndDate) {
+                    setRecurrenceEndDate(eventDate);
+                  }
+                }}
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+              >
+                <option value="none">Does not repeat</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly (same date)</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-500">Choose how often this event should repeat.</p>
+            </div>
+            <div>
+              <label htmlFor="recurrenceEndDate" className="block text-sm font-medium text-gray-700">
+                Repeat until
+              </label>
+              <input
+                id="recurrenceEndDate"
+                name="recurrenceEndDate"
+                type="date"
+                min={eventDate}
+                required={recurrenceMode !== "none"}
+                disabled={recurrenceMode === "none"}
+                value={recurrenceEndDate}
+                onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:bg-gray-100"
+              />
+              <p className="mt-1 text-xs text-gray-500">We&apos;ll stop listing repeats after this date.</p>
+            </div>
           </div>
         </div>
 
@@ -389,8 +466,16 @@ export default function CreateEventPage() {
       </form>
 
       {/* New location form — separate form to avoid nesting */}
-      {showNewLocation && !selectedLocation && (
-        <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
+      {showNewLocation && !selectedLocation && (() => {
+        const hasCoords = newLocLat !== "" && newLocLng !== "";
+        const googleMapsUrl = hasCoords
+          ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${newLocLat},${newLocLng}`)}`
+          : null;
+        const what3wordsUrl = hasCoords
+          ? `https://what3words.com/search?search=${encodeURIComponent(`${newLocLat},${newLocLng}`)}`
+          : "https://what3words.com/";
+        return (
+          <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
           <h3 className="text-sm font-semibold text-gray-700">Add New Location</h3>
 
           {/* Geocoding search */}
@@ -453,17 +538,40 @@ export default function CreateEventPage() {
                 <input id="locLng" name="locLng" type="number" step="any" required min="-180" max="180" value={newLocLng} onChange={(e) => setNewLocLng(e.target.value)} className="mt-1 block w-full rounded border border-gray-300 px-2 py-1.5 text-sm" placeholder="-0.1278" />
               </div>
             </div>
+            {googleMapsUrl && (
+              <p className="text-xs text-indigo-600">
+                <a href={googleMapsUrl} target="_blank" rel="noreferrer" className="hover:underline">
+                  Preview this pin on Google Maps
+                </a>
+              </p>
+            )}
+            <div>
+              <label htmlFor="locWhat3" className="block text-sm text-gray-600">What3Words (optional)</label>
+              <input id="locWhat3" name="locWhat3" type="text" value={newLocWhat3} onChange={(e) => setNewLocWhat3(e.target.value)} className="mt-1 block w-full rounded border border-gray-300 px-2 py-1.5 text-sm" placeholder="gently.snowy.magic" />
+              <p className="mt-1 text-xs text-gray-500">
+                Use dots between the three words. Need help?
+                <a href={what3wordsUrl} target="_blank" rel="noreferrer" className="ml-1 text-indigo-600 hover:underline">
+                  Open what3words in a new tab
+                </a>
+                .
+              </p>
+            </div>
+            <div>
+              <label htmlFor="locDirections" className="block text-sm text-gray-600">How to find us (optional)</label>
+              <textarea id="locDirections" name="locDirections" rows={3} value={newLocDirections} onChange={(e) => setNewLocDirections(e.target.value)} className="mt-1 block w-full rounded border border-gray-300 px-2 py-1.5 text-sm" placeholder="Landmarks, entrance instructions, etc." />
+            </div>
             <div className="flex gap-2">
               <button type="submit" disabled={creatingLocation} className="rounded bg-indigo-600 px-3 py-1.5 text-sm text-white hover:bg-indigo-700 disabled:opacity-50">
                 {creatingLocation ? "Creating…" : "Create Location"}
               </button>
-              <button type="button" onClick={() => { setShowNewLocation(false); setGeoQuery(""); setGeoResults([]); setNewLocName(""); setNewLocCity(""); setNewLocCountry(""); setNewLocLat(""); setNewLocLng(""); }} className="rounded border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-100">
+              <button type="button" onClick={() => { setShowNewLocation(false); setGeoQuery(""); setGeoResults([]); setNewLocName(""); setNewLocCity(""); setNewLocCountry(""); setNewLocLat(""); setNewLocLng(""); setNewLocWhat3(""); setNewLocDirections(""); }} className="rounded border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-100">
                 Cancel
               </button>
             </div>
           </form>
-        </div>
-      )}
+          </div>
+        );
+      })()}
     </main>
   );
 }

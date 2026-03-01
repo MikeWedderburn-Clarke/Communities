@@ -21,6 +21,8 @@ export async function getLocationById(db: Db, id: string): Promise<Location | nu
     country: row.country,
     latitude: row.latitude,
     longitude: row.longitude,
+    what3names: row.what3names ?? null,
+    howToFind: row.howToFind ?? null,
   };
 }
 
@@ -45,6 +47,8 @@ export async function searchLocations(db: Db, query: string): Promise<Location[]
     country: row.country,
     latitude: row.latitude,
     longitude: row.longitude,
+    what3names: row.what3names ?? null,
+    howToFind: row.howToFind ?? null,
   }));
 }
 
@@ -61,6 +65,8 @@ export async function getAllLocations(db: Db): Promise<Location[]> {
     country: row.country,
     latitude: row.latitude,
     longitude: row.longitude,
+    what3names: row.what3names ?? null,
+    howToFind: row.howToFind ?? null,
   }));
 }
 
@@ -77,6 +83,8 @@ export async function createLocation(
     country: input.country,
     latitude: input.latitude,
     longitude: input.longitude,
+    what3names: input.what3names,
+    howToFind: input.howToFind,
     createdBy,
   });
   return id;

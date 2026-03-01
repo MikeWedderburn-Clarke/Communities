@@ -14,12 +14,14 @@ export async function GET(
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
 
+  const occurrence = event.nextOccurrence ?? { dateTime: event.dateTime, endDateTime: event.endDateTime };
+
   const ics = generateIcs({
     id: event.id,
     title: event.title,
     description: event.description,
-    dateTime: event.dateTime,
-    endDateTime: event.endDateTime,
+    dateTime: occurrence.dateTime,
+    endDateTime: occurrence.endDateTime,
     location: `${event.location.name}, ${event.location.city}, ${event.location.country}`,
   });
 

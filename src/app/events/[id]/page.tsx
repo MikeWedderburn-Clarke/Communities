@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
-import { Header } from "@/components/header";
 import { RoleBadges } from "@/components/role-badges";
 import { SocialIcons } from "@/components/social-icons";
 import { getEventDetail } from "@/services/events";
 import { getCurrentUser } from "@/lib/auth";
+import { buildExternalMapLinks } from "@/lib/map-links";
+import { isEventFresh } from "@/lib/event-utils";
+import { formatRecurrenceSummary } from "@/lib/recurrence";
 import { db } from "@/db";
 import { RsvpForm } from "./rsvp-form";
 import Link from "next/link";
@@ -12,31 +14,98 @@ export const dynamic = "force-dynamic";
 
 export default async function EventDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
 }) {
   const { id } = await params;
+  const { from } = await searchParams;
   const user = await getCurrentUser();
   const event = await getEventDetail(db, id, user?.id ?? null, user?.isAdmin ?? false);
 
   if (!event) notFound();
 
+  const mapLinks = buildExternalMapLinks({
+    latitude: event.location.latitude,
+    longitude: event.location.longitude,
+    what3names: event.location.what3names,
+  });
+  const freshSinceLogin = isEventFresh(event, user?.lastLogin ?? null);
+  const upcoming = event.nextOccurrence ?? { dateTime: event.dateTime, endDateTime: event.endDateTime };
+  const recurrenceSummary = formatRecurrenceSummary(event.recurrence);
+
   return (
-    <>
-      <Header />
-      <main className="mx-auto max-w-3xl px-4 py-8">
-        <Link
-          href="/events"
-          className="text-sm text-indigo-600 hover:underline"
-        >
-          &larr; All events
-        </Link>
+    <main className="mx-auto max-w-3xl px-4 py-8">
+      <nav className="flex items-center gap-1.5 text-sm">
+        <Link href="/events" className="text-indigo-600 hover:underline">Events</Link>
+        {from === "map" || from === "list" ? (
+          <>
+            <span className="text-gray-400">›</span>
+            <Link
+              href={from === "map" ? "/events?view=map" : "/events"}
+              className="text-indigo-600 hover:underline"
+            >
+              {from === "map" ? "Map" : "List"}
+            </Link>
+            <span className="text-gray-400">›</span>
+            <span className="text-gray-700">{event.title}</span>
+          </>
+        ) : (
+          <>
+            <span className="text-gray-400">›</span>
+            <span className="text-gray-700">{event.title}</span>
+          </>
+        )}
+      </nav>
 
         <h1 className="mt-4 text-3xl font-bold">{event.title}</h1>
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
+          {freshSinceLogin && (
+            <span className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-700">
+              New since your last login
+            </span>
+          )}
+          <p className="text-xs text-gray-500">
+            Added {formatCompactDate(event.dateAdded)}
+            {event.dateAdded !== event.lastUpdated && (
+              <>
+                <span className="mx-1">•</span>
+                Updated {formatCompactDate(event.lastUpdated)}
+              </>
+            )}
+          </p>
+        </div>
 
         <div className="mt-4 space-y-2 text-gray-600">
-          <p>{formatDateTime(event.dateTime, event.endDateTime)}</p>
+          <p>{formatDateTime(upcoming.dateTime, upcoming.endDateTime)}</p>
+          {recurrenceSummary && (
+            <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">{recurrenceSummary}</p>
+          )}
           <p>{event.location.name}, {event.location.city}, {event.location.country}</p>
+          {event.location.what3names && (
+            <p className="text-sm text-indigo-600">What3Names: {event.location.what3names}</p>
+          )}
+          {event.location.howToFind && (
+            <p className="text-sm text-gray-700">
+              <span className="font-semibold text-gray-600">How to find us:</span> {event.location.howToFind}
+            </p>
+          )}
+          {mapLinks.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-2 text-xs">
+              {mapLinks.map((link) => (
+                <a
+                  key={link.label}
+                  href={link.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-gray-200 px-3 py-1 text-gray-600 hover:bg-gray-50"
+                >
+                  {link.label}
+                </a>
+              ))}
+            </div>
+          )}
         </div>
 
         <p className="mt-6 leading-relaxed text-gray-700">
@@ -126,7 +195,6 @@ export default async function EventDetailPage({
           </a>
         </div>
       </main>
-    </>
   );
 }
 
@@ -151,4 +219,14 @@ function formatDateTime(start: string, end: string): string {
     timeZone: "Europe/London",
   });
   return `${dateStr}, ${startTime} – ${endTime}`;
+}
+
+function formatCompactDate(iso: string): string {
+  const date = new Date(iso);
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "Europe/London",
+  });
 }

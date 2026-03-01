@@ -1,7 +1,8 @@
-import { eq, and, gte, isNotNull } from "drizzle-orm";
+import { eq, and, gte, isNotNull, or, ne } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "@/db/schema";
-import type { EventSummary, EventDetail, RoleCounts, Role, TeacherRequest, PendingEvent, EventStatus, CreateEventInput, Location } from "@/types";
+import { computeNextOccurrence } from "@/lib/recurrence";
+import type { EventSummary, EventDetail, RoleCounts, Role, TeacherRequest, PendingEvent, EventStatus, CreateEventInput, Location, RecurrenceRule } from "@/types";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -72,12 +73,18 @@ type EventListRow = {
   description: string;
   dateTime: string;
   endDateTime: string;
+  recurrenceType: RecurrenceRule["frequency"];
+  recurrenceEndDate: string | null;
   locationId: string;
   locationName: string;
   locationCity: string;
   locationCountry: string;
   locationLat: number;
   locationLon: number;
+  locationWhat3names: string | null;
+  locationHowToFind: string | null;
+  dateAdded: string;
+  lastUpdated: string;
   rsvpRole: string | null;
   rsvpIsTeaching: boolean | null;
 };
@@ -98,6 +105,8 @@ function groupEventRows(rows: EventListRow[]): EventSummary[] {
         description: row.description,
         dateTime: row.dateTime,
         endDateTime: row.endDateTime,
+        recurrence: recurrenceFromValues(row.recurrenceType, row.recurrenceEndDate),
+        nextOccurrence: null,
         location: {
           id: row.locationId,
           name: row.locationName,
@@ -105,10 +114,14 @@ function groupEventRows(rows: EventListRow[]): EventSummary[] {
           country: row.locationCountry,
           latitude: row.locationLat,
           longitude: row.locationLon,
+          what3names: row.locationWhat3names,
+          howToFind: row.locationHowToFind,
         },
         attendeeCount: 0,
         roleCounts: { Base: 0, Flyer: 0, Hybrid: 0 },
         teacherCount: 0,
+        dateAdded: row.dateAdded,
+        lastUpdated: row.lastUpdated,
       });
     }
     if (row.rsvpRole !== null) {
@@ -122,6 +135,22 @@ function groupEventRows(rows: EventListRow[]): EventSummary[] {
   }
   return Array.from(map.values());
 }
+function recurrenceFromValues(type: RecurrenceRule["frequency"], endDate: string | null): RecurrenceRule | null {
+  if (!type || type === "none") return null;
+  return { frequency: type, endDate };
+}
+
+function attachNextOccurrence(summary: EventSummary, referenceIso: string): EventSummary {
+  summary.nextOccurrence = computeNextOccurrence(summary.dateTime, summary.endDateTime, summary.recurrence, referenceIso);
+  return summary;
+}
+
+function finalizeEventSummaries(rows: EventListRow[], referenceIso: string, dropPast: boolean): EventSummary[] {
+  const summaries = groupEventRows(rows).map((event) => attachNextOccurrence(event, referenceIso));
+  const filtered = dropPast ? summaries.filter((event) => event.nextOccurrence !== null) : summaries;
+  const getSortValue = (event: EventSummary) => event.nextOccurrence?.dateTime ?? event.dateTime;
+  return filtered.sort((a, b) => getSortValue(a).localeCompare(getSortValue(b)));
+}
 
 const EVENT_LIST_SELECT = (s: typeof schema) => ({
   eventId: s.events.id,
@@ -129,12 +158,18 @@ const EVENT_LIST_SELECT = (s: typeof schema) => ({
   description: s.events.description,
   dateTime: s.events.dateTime,
   endDateTime: s.events.endDateTime,
+  recurrenceType: s.events.recurrenceType,
+  recurrenceEndDate: s.events.recurrenceEndDate,
   locationId: s.locations.id,
   locationName: s.locations.name,
   locationCity: s.locations.city,
   locationCountry: s.locations.country,
   locationLat: s.locations.latitude,
   locationLon: s.locations.longitude,
+  locationWhat3names: s.locations.what3names,
+  locationHowToFind: s.locations.howToFind,
+  dateAdded: s.events.dateAdded,
+  lastUpdated: s.events.lastUpdated,
   rsvpRole: s.rsvps.role,
   rsvpIsTeaching: s.rsvps.isTeaching,
 });
@@ -146,20 +181,31 @@ export async function getUpcomingEvents(db: Db): Promise<EventSummary[]> {
     .from(schema.events)
     .innerJoin(schema.locations, eq(schema.events.locationId, schema.locations.id))
     .leftJoin(schema.rsvps, eq(schema.rsvps.eventId, schema.events.id))
-    .where(and(gte(schema.events.dateTime, now), eq(schema.events.status, "approved")))
+    .where(
+      and(
+        eq(schema.events.status, "approved"),
+        or(gte(schema.events.dateTime, now), ne(schema.events.recurrenceType, "none"))
+      )
+    )
     .orderBy(schema.events.dateTime);
-  return groupEventRows(rows);
+  return finalizeEventSummaries(rows, now, true);
 }
 
 export async function getAllEvents(db: Db): Promise<EventSummary[]> {
+  const now = new Date().toISOString();
   const rows = await db
     .select(EVENT_LIST_SELECT(schema))
     .from(schema.events)
     .innerJoin(schema.locations, eq(schema.events.locationId, schema.locations.id))
     .leftJoin(schema.rsvps, eq(schema.rsvps.eventId, schema.events.id))
-    .where(eq(schema.events.status, "approved"))
+    .where(
+      and(
+        eq(schema.events.status, "approved"),
+        or(gte(schema.events.dateTime, now), ne(schema.events.recurrenceType, "none"))
+      )
+    )
     .orderBy(schema.events.dateTime);
-  return groupEventRows(rows);
+  return finalizeEventSummaries(rows, now, true);
 }
 
 export async function getEventDetail(
@@ -176,13 +222,19 @@ export async function getEventDetail(
       description: schema.events.description,
       dateTime: schema.events.dateTime,
       endDateTime: schema.events.endDateTime,
+      recurrenceType: schema.events.recurrenceType,
+      recurrenceEndDate: schema.events.recurrenceEndDate,
       status: schema.events.status,
+      dateAdded: schema.events.dateAdded,
+      lastUpdated: schema.events.lastUpdated,
       locationId: schema.locations.id,
       locationName: schema.locations.name,
       locationCity: schema.locations.city,
       locationCountry: schema.locations.country,
       locationLat: schema.locations.latitude,
       locationLon: schema.locations.longitude,
+      locationWhat3names: schema.locations.what3names,
+      locationHowToFind: schema.locations.howToFind,
     })
     .from(schema.events)
     .innerJoin(schema.locations, eq(schema.events.locationId, schema.locations.id))
@@ -191,6 +243,8 @@ export async function getEventDetail(
 
   if (!eventRow) return null;
 
+  const recurrence = recurrenceFromValues(eventRow.recurrenceType, eventRow.recurrenceEndDate);
+
   const location: Location = {
     id: eventRow.locationId,
     name: eventRow.locationName,
@@ -198,6 +252,8 @@ export async function getEventDetail(
     country: eventRow.locationCountry,
     latitude: eventRow.locationLat,
     longitude: eventRow.locationLon,
+    what3names: eventRow.locationWhat3names,
+    howToFind: eventRow.locationHowToFind,
   };
 
   const rsvpRows = await db
@@ -242,6 +298,10 @@ export async function getEventDetail(
     description: eventRow.description,
     dateTime: eventRow.dateTime,
     endDateTime: eventRow.endDateTime,
+    dateAdded: eventRow.dateAdded,
+    lastUpdated: eventRow.lastUpdated,
+    recurrence,
+    nextOccurrence: computeNextOccurrence(eventRow.dateTime, eventRow.endDateTime, recurrence),
     location,
     attendeeCount: rsvpRows.length,
     roleCounts,
@@ -353,6 +413,7 @@ export async function createEvent(
 ): Promise<string> {
   const id = `evt-${crypto.randomUUID()}`;
   const status: EventStatus = isAdmin ? "approved" : "pending";
+  const now = new Date().toISOString();
   await db.insert(schema.events).values({
     id,
     title: input.title,
@@ -360,8 +421,12 @@ export async function createEvent(
     dateTime: input.dateTime,
     endDateTime: input.endDateTime,
     locationId: input.locationId,
+      recurrenceType: input.recurrence?.frequency ?? "none",
+      recurrenceEndDate: input.recurrence?.endDate ?? null,
     status,
     createdBy,
+    dateAdded: now,
+    lastUpdated: now,
   });
   return id;
 }

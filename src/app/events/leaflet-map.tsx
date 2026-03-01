@@ -1,343 +1,298 @@
 "use client";
 
-import { useEffect, useRef, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
 import L from "leaflet";
+import { BreadcrumbNav } from "./breadcrumbs";
+import { normalizeCityName } from "@/lib/city-utils";
+import { isEventFresh } from "@/lib/event-utils";
 import type { EventSummary } from "@/types";
 
 import "leaflet/dist/leaflet.css";
 
-// ── Discrete zoom levels ───────────────────────────────────────────
-
 type Level = 1 | 2 | 3;
-
 const LEVEL_ZOOM: Record<Level, number> = { 1: 2, 2: 5, 3: 12 };
-const LEVEL_LABEL: Record<Level, string> = {
-  1: "Globe",
-  2: "Country",
-  3: "City",
-};
 
-// ── Icon factories ─────────────────────────────────────────────────
-
-/** Circular bubble for Globe and Country levels — clickable to drill down. */
-function bubbleIcon(line1: string, line2: string, color: string, size = 52) {
-  return L.divIcon({
-    html: `<div style="
-      background:${color};
-      color:#fff;
-      border-radius:50%;
-      width:${size}px;
-      height:${size}px;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      justify-content:center;
-      font-weight:700;
-      font-size:11px;
-      border:3px solid #fff;
-      box-shadow:0 2px 6px rgba(0,0,0,.3);
-      text-align:center;
-      line-height:1.25;
-      padding:2px;
-      box-sizing:border-box;
-      cursor:pointer;
-    "><span>${line1}</span><span style="font-weight:400;font-size:10px">${line2}</span></div>`,
-    className: "",
-    iconSize: L.point(size, size),
-    iconAnchor: L.point(size / 2, size / 2),
-  });
-}
-
-/**
- * Pill-shaped icon for City level.
- * Shows truncated event title; clicking navigates to the event page.
- */
-function eventPillIcon(title: string) {
-  const MAX = 24;
-  const label = title.length > MAX ? title.slice(0, MAX - 1) + "\u2026" : title;
-  const W = 170;
-  return L.divIcon({
-    html: `<div style="
-      background:#059669;
-      color:#fff;
-      border-radius:999px;
-      padding:5px 12px;
-      font-size:11px;
-      font-weight:600;
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-      border:2px solid #fff;
-      box-shadow:0 2px 6px rgba(0,0,0,.3);
-      cursor:pointer;
-      width:${W}px;
-      box-sizing:border-box;
-    " title="${title}">${label}</div>`,
-    className: "",
-    iconSize: L.point(W, 28),
-    iconAnchor: L.point(W / 2, 14),
-  });
-}
-
-// ── MapController ──────────────────────────────────────────────────
-// Renders nothing; uses useMap() to fly to the new level/center when
-// the user changes level.  Skips the initial mount to avoid animating
-// over the position MapContainer already set.
-
-function MapController({
-  level,
-  center,
-}: {
-  level: Level;
+interface CityEntry {
+  city: string;
+  country: string;
+  count: number;
   center: [number, number];
-}) {
-  const map = useMap();
-  const mounted = useRef(false);
-
-  useEffect(() => {
-    if (!mounted.current) {
-      mounted.current = true;
-      return;
-    }
-    map.flyTo(center, LEVEL_ZOOM[level], { duration: 0.75 });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [level, center[0], center[1]]);
-
-  return null;
+  bounds: [[number, number], [number, number]];
 }
 
-// ── Centroid helpers ───────────────────────────────────────────────
-
-function centroid(pts: { lat: number; lng: number }[]): [number, number] {
-  const n = pts.length;
-  return [
-    pts.reduce((s, p) => s + p.lat, 0) / n,
-    pts.reduce((s, p) => s + p.lng, 0) / n,
-  ];
+interface CountryEntry {
+  country: string;
+  count: number;
+  center: [number, number];
 }
-
-// ── Main component ─────────────────────────────────────────────────
 
 interface Props {
   events: EventSummary[];
   homeCity?: string | null;
+  userLastLogin: string | null;
 }
 
-export function LeafletMap({ events, homeCity }: Props) {
-  // ── Aggregate events by country and by city ──────────────────────
-  const byCountry = useMemo(() => {
-    const m = new Map<string, { pts: { lat: number; lng: number }[]; count: number }>();
-    for (const e of events) {
-      const key = e.location.country;
-      if (!m.has(key)) m.set(key, { pts: [], count: 0 });
-      const v = m.get(key)!;
-      v.pts.push({ lat: e.location.latitude, lng: e.location.longitude });
-      v.count++;
+export function LeafletMap({ events, homeCity, userLastLogin }: Props) {
+  const normalizedHomeCity = normalizeCityName(homeCity) ?? homeCity ?? null;
+
+  const { cityEntries, countryEntries, cityMap, countryMap } = useMemo(() => {
+    const cityStats = new Map<string, { city: string; country: string; pts: { lat: number; lng: number }[]; count: number }>();
+    for (const event of events) {
+      const canonicalCity = normalizeCityName(event.location.city) ?? event.location.city;
+      const key = `${canonicalCity}||${event.location.country}`;
+      if (!cityStats.has(key)) {
+        cityStats.set(key, { city: canonicalCity, country: event.location.country, pts: [], count: 0 });
+      }
+      const entry = cityStats.get(key)!;
+      entry.pts.push({ lat: event.location.latitude, lng: event.location.longitude });
+      entry.count++;
     }
-    return Array.from(m.entries()).map(([country, d]) => ({
-      country,
-      center: centroid(d.pts),
-      count: d.count,
-    }));
+
+    const countryStats = new Map<string, { pts: { lat: number; lng: number }[]; count: number }>();
+    for (const entry of cityStats.values()) {
+      const country = entry.country;
+      const stats = countryStats.get(country) ?? { pts: [], count: 0 };
+      stats.pts.push(...entry.pts);
+      stats.count += entry.count;
+      countryStats.set(country, stats);
+    }
+
+    const cities: CityEntry[] = [];
+    const cityLookup = new Map<string, CityEntry>();
+    for (const entry of cityStats.values()) {
+      if (entry.pts.length === 0) continue;
+      const center = centroid(entry.pts);
+      const bounds = buildBounds(entry.pts);
+      const record: CityEntry = {
+        city: entry.city,
+        country: entry.country,
+        count: entry.count,
+        center,
+        bounds,
+      };
+      const mapKey = `${entry.city}||${entry.country}`;
+      cities.push(record);
+      cityLookup.set(mapKey, record);
+    }
+
+    const countries: CountryEntry[] = [];
+    const countryLookup = new Map<string, CountryEntry>();
+    for (const [country, stats] of countryStats.entries()) {
+      if (stats.pts.length === 0) continue;
+      const center = centroid(stats.pts);
+      const record: CountryEntry = { country, count: stats.count, center };
+      countries.push(record);
+      countryLookup.set(country, record);
+    }
+
+    cities.sort((a, b) => a.city.localeCompare(b.city));
+    countries.sort((a, b) => a.country.localeCompare(b.country));
+
+    return { cityEntries: cities, countryEntries: countries, cityMap: cityLookup, countryMap: countryLookup };
   }, [events]);
 
-  const byCity = useMemo(() => {
-    const m = new Map<
-      string,
-      { city: string; country: string; pts: { lat: number; lng: number }[]; count: number }
-    >();
-    for (const e of events) {
-      const key = `${e.location.city}||${e.location.country}`;
-      if (!m.has(key))
-        m.set(key, { city: e.location.city, country: e.location.country, pts: [], count: 0 });
-      const v = m.get(key)!;
-      v.pts.push({ lat: e.location.latitude, lng: e.location.longitude });
-      v.count++;
-    }
-    return Array.from(m.values()).map((d) => ({
-      city: d.city,
-      country: d.country,
-      center: centroid(d.pts),
-      count: d.count,
-    }));
+  const globalCenter = useMemo(() => {
+    if (events.length === 0) return [20, 0] as [number, number];
+    const pts = events.map((event) => ({ lat: event.location.latitude, lng: event.location.longitude }));
+    return centroid(pts);
   }, [events]);
 
-  // ── Derive initial level / center ────────────────────────────────
-  const allPts = events.map((e) => ({
-    lat: e.location.latitude,
-    lng: e.location.longitude,
-  }));
-  const globalCenter: [number, number] = allPts.length > 0 ? centroid(allPts) : [20, 0];
+  const initialCity = normalizedHomeCity ? cityEntries.find((c) => c.city === normalizedHomeCity) : undefined;
+  const [level, setLevel] = useState<Level>(initialCity ? 3 : 1);
+  const [activeCountry, setActiveCountry] = useState<string | null>(initialCity?.country ?? null);
+  const [activeCity, setActiveCity] = useState<string | null>(initialCity?.city ?? null);
 
-  const homeCityData = homeCity
-    ? byCity.find((c) => c.city === homeCity) ?? null
-    : null;
-
-  const [level, setLevel] = useState<Level>(homeCityData ? 3 : 1);
-  const [center, setCenter] = useState<[number, number]>(
-    homeCityData ? homeCityData.center : globalCenter,
+  const freshEventIds = useMemo(
+    () => new Set(events.filter((event) => isEventFresh(event, userLastLogin)).map((event) => event.id)),
+    [events, userLastLogin],
   );
 
-  // ── Drill-down handlers (called by clicking a bubble marker) ─────
-  function drillToCountry(c: (typeof byCountry)[number]) {
-    setCenter(c.center);
+  const currentCenter = useMemo<[number, number]>(() => {
+    if (level === 3 && activeCity && activeCountry) {
+      return cityMap.get(`${activeCity}||${activeCountry}`)?.center ?? globalCenter;
+    }
+    if (level === 2 && activeCountry) {
+      return countryMap.get(activeCountry)?.center ?? globalCenter;
+    }
+    return globalCenter;
+  }, [level, activeCity, activeCountry, cityMap, countryMap, globalCenter]);
+
+  const currentBounds = useMemo<[[number, number], [number, number]] | null>(() => {
+    if (level === 3 && activeCity && activeCountry) {
+      return cityMap.get(`${activeCity}||${activeCountry}`)?.bounds ?? null;
+    }
+    return null;
+  }, [level, activeCity, activeCountry, cityMap]);
+
+  const breadcrumbItems = useMemo(() => {
+    const items = [] as { label: string; action?: () => void }[];
+    items.push({ label: "Globe", action: level === 1 ? undefined : () => handleGlobe() });
+    if (activeCountry) {
+      items.push({
+        label: activeCountry,
+        action: level === 2 ? undefined : () => handleCountry(activeCountry),
+      });
+    }
+    if (activeCity && activeCountry) {
+      items.push({
+        label: activeCity,
+        action: level === 3 ? undefined : () => handleCity(activeCountry, activeCity),
+      });
+    }
+    return items;
+  }, [level, activeCountry, activeCity]);
+
+  function handleGlobe() {
+    setLevel(1);
+    setActiveCountry(null);
+    setActiveCity(null);
+  }
+
+  function handleCountry(country: string) {
     setLevel(2);
+    setActiveCountry(country);
+    setActiveCity(null);
   }
 
-  function drillToCity(c: (typeof byCity)[number]) {
-    setCenter(c.center);
+  function handleCity(country: string, city: string) {
     setLevel(3);
+    setActiveCountry(country);
+    setActiveCity(city);
   }
 
-  // ── Zoom In / Out button handlers ────────────────────────────────
-  function zoomIn() {
-    if (level === 1) {
-      if (homeCityData) {
-        const countryEntry = byCountry.find((c) => c.country === homeCityData.country);
-        setCenter(countryEntry?.center ?? globalCenter);
-      } else {
-        setCenter(globalCenter);
-      }
-      setLevel(2);
-    } else if (level === 2) {
-      if (homeCityData) {
-        setCenter(homeCityData.center);
-      } else if (byCity.length > 0) {
-        const biggest = byCity.reduce((a, b) => (b.count > a.count ? b : a));
-        setCenter(biggest.center);
-      }
-      setLevel(3);
-    }
+  if (events.length === 0) {
+    return <p className="mt-6 text-gray-500">No events to show yet.</p>;
   }
 
-  function zoomOut() {
-    if (level === 3) {
-      setLevel(2);
-    } else if (level === 2) {
-      setCenter(globalCenter);
-      setLevel(1);
-    }
-  }
+  const citiesForActiveCountry = activeCountry
+    ? cityEntries.filter((city) => city.country === activeCountry)
+    : cityEntries;
 
-  const hints: Record<Level, string> = {
-    1: "Click a country to zoom in, or use the Zoom In button.",
-    2: "Click a city to zoom in, or use the Zoom In button.",
-    3: "Click an event name to view details.",
-  };
+  const cityEvents = events.filter((event) => {
+    if (!activeCity || !activeCountry) return false;
+    const canonical = normalizeCityName(event.location.city) ?? event.location.city;
+    return canonical === activeCity && event.location.country === activeCountry;
+  });
 
   return (
-    <div className="mt-6">
-      {/* Level controls */}
-      <div className="mb-3 flex items-center gap-3">
-        <button
-          onClick={zoomOut}
-          disabled={level === 1}
-          className="rounded border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 transition hover:border-gray-400 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          ← Zoom Out
-        </button>
-
-        {/* Breadcrumb level indicator */}
-        <div className="flex items-center gap-1 text-sm">
-          {([1, 2, 3] as const).map((l, i) => (
-            <span key={l} className="flex items-center gap-1">
-              {i > 0 && <span className="text-gray-300">›</span>}
-              <span
-                className={
-                  l === level ? "font-semibold text-indigo-600" : "text-gray-400"
-                }
-              >
-                {LEVEL_LABEL[l]}
-              </span>
-            </span>
-          ))}
-        </div>
-
-        <button
-          onClick={zoomIn}
-          disabled={level === 3}
-          className="rounded border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 transition hover:border-gray-400 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Zoom In →
-        </button>
-      </div>
-
-      {/* Map */}
-      <div
-        className="overflow-hidden rounded-lg border border-gray-200 shadow-sm"
-        style={{ height: "480px" }}
-      >
+    <div className="mt-6 space-y-3">
+      <BreadcrumbNav items={breadcrumbItems} />
+      <div className="overflow-hidden rounded-lg border border-gray-200 shadow-sm" style={{ height: 480 }}>
         <MapContainer
-          center={center}
+          center={currentCenter}
           zoom={LEVEL_ZOOM[level]}
           style={{ height: "100%", width: "100%" }}
-          scrollWheelZoom={false}
-          zoomControl={false}
-          doubleClickZoom={false}
-          touchZoom={false}
+          scrollWheelZoom
+          doubleClickZoom
+          touchZoom
           keyboard={false}
+          zoomControl={false}
         >
-          <MapController level={level} center={center} />
-
-          {/* CartoDB Positron — clean, minimal, free, no API key needed */}
+          <MapController center={currentCenter} zoom={LEVEL_ZOOM[level]} bounds={currentBounds} />
           <TileLayer
             attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
             subdomains="abcd"
             maxZoom={19}
           />
-
-          {/* Level 1 — Globe: one bubble per country */}
           {level === 1 &&
-            byCountry.map((c) => (
+            countryEntries.map((country) => (
               <Marker
-                key={c.country}
-                position={c.center}
-                icon={bubbleIcon(
-                  c.country,
-                  `${c.count} event${c.count !== 1 ? "s" : ""}`,
-                  "#6366f1",
-                  56,
-                )}
-                eventHandlers={{ click: () => drillToCountry(c) }}
+                key={country.country}
+                position={country.center}
+                icon={countIcon(country.count, "#6366f1", `${country.country}: ${country.count} event${country.count !== 1 ? "s" : ""}`)}
+                eventHandlers={{ click: () => handleCountry(country.country) }}
               />
             ))}
-
-          {/* Level 2 — Country: one bubble per city */}
           {level === 2 &&
-            byCity.map((c) => (
+            citiesForActiveCountry.map((city) => (
               <Marker
-                key={`${c.city}-${c.country}`}
-                position={c.center}
-                icon={bubbleIcon(
-                  c.city,
-                  `${c.count} event${c.count !== 1 ? "s" : ""}`,
-                  "#0ea5e9",
-                  52,
-                )}
-                eventHandlers={{ click: () => drillToCity(c) }}
+                key={`${city.city}-${city.country}`}
+                position={city.center}
+                icon={countIcon(city.count, "#0ea5e9", `${city.city}: ${city.count} event${city.count !== 1 ? "s" : ""}`)}
+                eventHandlers={{ click: () => handleCity(city.country, city.city) }}
               />
             ))}
-
-          {/* Level 3 — City: one pill per event showing the event name */}
           {level === 3 &&
-            events.map((event) => (
+            cityEvents.map((event) => (
               <Marker
                 key={event.id}
                 position={[event.location.latitude, event.location.longitude]}
-                icon={eventPillIcon(event.title)}
-                eventHandlers={{
-                  click: () => {
-                    window.location.href = `/events/${event.id}`;
-                  },
-                }}
+                icon={eventPillIcon(event.title, freshEventIds.has(event.id))}
+                eventHandlers={{ click: () => (window.location.href = `/events/${event.id}?from=map`) }}
               />
             ))}
         </MapContainer>
       </div>
-
-      <p className="mt-2 text-xs text-gray-400">{hints[level]}</p>
     </div>
   );
+}
+
+function MapController({ center, bounds, zoom }: { center: [number, number]; bounds: [[number, number], [number, number]] | null; zoom: number }) {
+  const map = useMap();
+  const mounted = useRef(false);
+
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      if (bounds) {
+        map.fitBounds(bounds, { padding: [24, 24] });
+      } else {
+        map.setView(center, zoom);
+      }
+      return;
+    }
+    if (bounds) {
+      map.flyToBounds(bounds, { padding: [24, 24], duration: 0.75 });
+    } else {
+      map.flyTo(center, zoom, { duration: 0.75 });
+    }
+  }, [bounds, center, map, zoom]);
+
+  return null;
+}
+
+function centroid(pts: { lat: number; lng: number }[]): [number, number] {
+  if (pts.length === 0) return [20, 0];
+  const lat = pts.reduce((sum, p) => sum + p.lat, 0) / pts.length;
+  const lng = pts.reduce((sum, p) => sum + p.lng, 0) / pts.length;
+  return [lat, lng];
+}
+
+function buildBounds(pts: { lat: number; lng: number }[]): [[number, number], [number, number]] {
+  const lats = pts.map((p) => p.lat);
+  const lngs = pts.map((p) => p.lng);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  const latPadding = Math.max(0.02, (maxLat - minLat) * 0.1);
+  const lngPadding = Math.max(0.02, (maxLng - minLng) * 0.1);
+  return [[minLat - latPadding, minLng - lngPadding], [maxLat + latPadding, maxLng + lngPadding]];
+}
+
+function escapeAttr(value: string): string {
+  return value.replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function countIcon(count: number, color: string, title?: string, size = 58) {
+  const titleAttr = title ? `title="${escapeAttr(title)}"` : "";
+  return L.divIcon({
+    html: `<div ${titleAttr} style="background:${color};color:#fff;border-radius:50%;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);">${count}</div>`,
+    className: "",
+    iconSize: L.point(size, size),
+    iconAnchor: L.point(size / 2, size / 2),
+  });
+}
+
+function eventPillIcon(title: string, highlight: boolean) {
+  const color = highlight ? "#dc2626" : "#059669";
+  const label = title.length > 24 ? `${title.slice(0, 23)}…` : title;
+  return L.divIcon({
+    html: `<div title="${escapeAttr(title)}" style="background:${color};color:#fff;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);cursor:pointer;box-sizing:border-box;">${label}</div>`,
+    className: "",
+    iconSize: L.point(160, 28),
+    iconAnchor: L.point(80, 14),
+  });
 }

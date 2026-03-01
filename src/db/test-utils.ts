@@ -32,7 +32,8 @@ export function createTestDb() {
       show_website INTEGER NOT NULL DEFAULT 0,
       show_youtube INTEGER NOT NULL DEFAULT 0,
       home_city TEXT,
-      use_current_location INTEGER NOT NULL DEFAULT 0
+      use_current_location INTEGER NOT NULL DEFAULT 0,
+      last_login TEXT
     );
     CREATE TABLE locations (
       id TEXT PRIMARY KEY,
@@ -41,6 +42,8 @@ export function createTestDb() {
       country TEXT NOT NULL,
       latitude REAL NOT NULL,
       longitude REAL NOT NULL,
+      what3names TEXT,
+      how_to_find TEXT,
       created_by TEXT REFERENCES users(id)
     );
     CREATE UNIQUE INDEX locations_name_city_country_unique ON locations(name, city, country);
@@ -52,7 +55,11 @@ export function createTestDb() {
       end_date_time TEXT NOT NULL,
       location_id TEXT NOT NULL REFERENCES locations(id),
       status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('approved','pending','rejected')),
-      created_by TEXT REFERENCES users(id)
+      created_by TEXT REFERENCES users(id),
+      date_added TEXT NOT NULL,
+      last_updated TEXT NOT NULL,
+      recurrence_type TEXT NOT NULL DEFAULT 'none' CHECK(recurrence_type IN ('none','daily','weekly','monthly')),
+      recurrence_end_date TEXT
     );
     CREATE TABLE rsvps (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -1,4 +1,5 @@
 import type { EventSummary, LocationHierarchy, CountryGroup, CityGroup, VenueGroup } from "@/types";
+import { normalizeCityName } from "@/lib/city-utils";
 
 /**
  * Group a flat array of events into a Country → City → Venue hierarchy.
@@ -10,7 +11,7 @@ export function buildLocationHierarchy(events: EventSummary[]): LocationHierarch
 
   for (const event of events) {
     const country = event.location.country;
-    const city = event.location.city;
+    const city = normalizeCityName(event.location.city) ?? event.location.city;
     const venue = event.location.name;
 
     let cityMap = countryMap.get(country);
@@ -50,7 +51,7 @@ export function buildLocationHierarchy(events: EventSummary[]): LocationHierarch
           venue,
           latitude: lat,
           longitude: lng,
-          events: venueEvents.sort((a, b) => a.dateTime.localeCompare(b.dateTime)),
+          events: venueEvents.sort((a, b) => getPrimaryDate(a).localeCompare(getPrimaryDate(b))),
           eventCount: venueEvents.length,
         });
       }
@@ -83,4 +84,8 @@ export function buildLocationHierarchy(events: EventSummary[]): LocationHierarch
 
   countries.sort((a, b) => a.country.localeCompare(b.country));
   return countries;
+}
+
+function getPrimaryDate(event: EventSummary): string {
+  return event.nextOccurrence?.dateTime ?? event.dateTime;
 }

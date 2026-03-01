@@ -27,7 +27,8 @@ sqlite.exec(`
     show_website INTEGER NOT NULL DEFAULT 0,
     show_youtube INTEGER NOT NULL DEFAULT 0,
     home_city TEXT,
-    use_current_location INTEGER NOT NULL DEFAULT 0
+    use_current_location INTEGER NOT NULL DEFAULT 0,
+    last_login TEXT
   );
   CREATE TABLE IF NOT EXISTS locations (
     id TEXT PRIMARY KEY,
@@ -36,6 +37,8 @@ sqlite.exec(`
     country TEXT NOT NULL,
     latitude REAL NOT NULL,
     longitude REAL NOT NULL,
+    what3names TEXT,
+    how_to_find TEXT,
     created_by TEXT REFERENCES users(id)
   );
   CREATE UNIQUE INDEX IF NOT EXISTS locations_name_city_country_unique ON locations(name, city, country);
@@ -47,7 +50,11 @@ sqlite.exec(`
     end_date_time TEXT NOT NULL,
     location_id TEXT NOT NULL REFERENCES locations(id),
     status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('approved','pending','rejected')),
-    created_by TEXT REFERENCES users(id)
+    created_by TEXT REFERENCES users(id),
+    date_added TEXT NOT NULL,
+    last_updated TEXT NOT NULL,
+    recurrence_type TEXT NOT NULL DEFAULT 'none' CHECK(recurrence_type IN ('none','daily','weekly','monthly')),
+    recurrence_end_date TEXT
   );
   CREATE TABLE IF NOT EXISTS rsvps (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,6 +78,7 @@ const seedUsers = [
     facebookUrl: "https://facebook.com/alicejohnson", instagramUrl: "https://instagram.com/alice_acro",
     websiteUrl: null, youtubeUrl: null,
     showFacebook: 1, showInstagram: 1, showWebsite: 0, showYoutube: 0,
+    lastLogin: "2026-03-05T08:00:00Z",
   },
   {
     id: "user-bob", name: "Bob Smith", email: "bob@example.com",
@@ -80,6 +88,7 @@ const seedUsers = [
     facebookUrl: null, instagramUrl: "https://instagram.com/bob_flies",
     websiteUrl: null, youtubeUrl: null,
     showFacebook: 0, showInstagram: 1, showWebsite: 0, showYoutube: 0,
+    lastLogin: "2026-03-02T10:30:00Z",
   },
   {
     id: "user-carol", name: "Carol Williams", email: "carol@example.com",
@@ -89,6 +98,7 @@ const seedUsers = [
     facebookUrl: null, instagramUrl: null,
     websiteUrl: null, youtubeUrl: null,
     showFacebook: 0, showInstagram: 0, showWebsite: 0, showYoutube: 0,
+    lastLogin: null,
   },
   {
     id: "user-dan", name: "Dan Brown", email: "dan@example.com",
@@ -98,6 +108,7 @@ const seedUsers = [
     facebookUrl: null, instagramUrl: null,
     websiteUrl: "https://danbrown-acro.com", youtubeUrl: null,
     showFacebook: 0, showInstagram: 0, showWebsite: 1, showYoutube: 0,
+    lastLogin: "2026-03-04T09:45:00Z",
   },
 ];
 
@@ -105,41 +116,41 @@ const insertUser = sqlite.prepare(
   `INSERT OR IGNORE INTO users
    (id, name, email, is_admin, is_teacher_approved, teacher_requested_at, teacher_approved_by,
     default_role, default_show_name, facebook_url, instagram_url, website_url, youtube_url,
-    show_facebook, show_instagram, show_website, show_youtube, home_city, use_current_location)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    show_facebook, show_instagram, show_website, show_youtube, home_city, use_current_location, last_login)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 );
 for (const u of seedUsers) {
   insertUser.run(
     u.id, u.name, u.email, u.isAdmin, u.isTeacherApproved, u.teacherRequestedAt, u.teacherApprovedBy,
     u.defaultRole, u.defaultShowName, u.facebookUrl, u.instagramUrl, u.websiteUrl, u.youtubeUrl,
-    u.showFacebook, u.showInstagram, u.showWebsite, u.showYoutube, null, 0
+    u.showFacebook, u.showInstagram, u.showWebsite, u.showYoutube, null, 0, u.lastLogin
   );
 }
 
 // ── Seed locations (London + New York + Bristol + Bournemouth) ──────
 const seedLocations = [
-  { id: "loc-regents-park", name: "Regent's Park", city: "London", country: "United Kingdom", latitude: 51.5273, longitude: -0.1535 },
-  { id: "loc-gym-brixton", name: "The Gym Group Brixton", city: "London", country: "United Kingdom", latitude: 51.4613, longitude: -0.1150 },
-  { id: "loc-colombo", name: "Colombo Centre, Elephant & Castle", city: "London", country: "United Kingdom", latitude: 51.4946, longitude: -0.1008 },
-  { id: "loc-laban", name: "Laban Dance Centre, Greenwich", city: "London", country: "United Kingdom", latitude: 51.4741, longitude: -0.0143 },
-  { id: "loc-victoria-park", name: "Victoria Park, Hackney", city: "London", country: "United Kingdom", latitude: 51.5368, longitude: -0.0396 },
+  { id: "loc-regents-park", name: "Regent's Park", city: "London", country: "United Kingdom", latitude: 51.5273, longitude: -0.1535, what3names: "gently.snowy.magic", howToFind: "Meet near the bandstand by the cafe." },
+  { id: "loc-gym-brixton", name: "The Gym Group Brixton", city: "London", country: "United Kingdom", latitude: 51.4613, longitude: -0.1150, what3names: "bench.crossing.now", howToFind: "Enter through the main gym on Brixton Hill." },
+  { id: "loc-colombo", name: "Colombo Centre, Elephant & Castle", city: "London", country: "United Kingdom", latitude: 51.4946, longitude: -0.1008, what3names: null, howToFind: null },
+  { id: "loc-laban", name: "Laban Dance Centre, Greenwich", city: "London", country: "United Kingdom", latitude: 51.4741, longitude: -0.0143, what3names: null, howToFind: null },
+  { id: "loc-victoria-park", name: "Victoria Park, Hackney", city: "London", country: "United Kingdom", latitude: 51.5368, longitude: -0.0396, what3names: null, howToFind: null },
   // New York
-  { id: "loc-central-park", name: "Central Park Great Lawn", city: "New York", country: "United States", latitude: 40.7812, longitude: -73.9665 },
-  { id: "loc-prospect-park", name: "Prospect Park Long Meadow", city: "New York", country: "United States", latitude: 40.6602, longitude: -73.9690 },
-  { id: "loc-domino-park", name: "Domino Park, Williamsburg", city: "New York", country: "United States", latitude: 40.7135, longitude: -73.9683 },
+  { id: "loc-central-park", name: "Central Park Great Lawn", city: "New York", country: "United States", latitude: 40.7812, longitude: -73.9665, what3names: "open.perfect.lawn", howToFind: "Meet near the Delacorte Theater steps." },
+  { id: "loc-prospect-park", name: "Prospect Park Long Meadow", city: "New York", country: "United States", latitude: 40.6602, longitude: -73.9690, what3names: null, howToFind: null },
+  { id: "loc-domino-park", name: "Domino Park, Williamsburg", city: "New York", country: "United States", latitude: 40.7135, longitude: -73.9683, what3names: null, howToFind: null },
   // Bristol
-  { id: "loc-castle-park", name: "Castle Park", city: "Bristol", country: "United Kingdom", latitude: 51.4530, longitude: -2.5900 },
-  { id: "loc-the-motion", name: "The Motion", city: "Bristol", country: "United Kingdom", latitude: 51.4490, longitude: -2.5830 },
+  { id: "loc-castle-park", name: "Castle Park", city: "Bristol", country: "United Kingdom", latitude: 51.4530, longitude: -2.5900, what3names: null, howToFind: null },
+  { id: "loc-the-motion", name: "The Motion", city: "Bristol", country: "United Kingdom", latitude: 51.4490, longitude: -2.5830, what3names: null, howToFind: null },
   // Bournemouth
-  { id: "loc-boscombe-beach", name: "Boscombe Beach", city: "Bournemouth", country: "United Kingdom", latitude: 50.7198, longitude: -1.8400 },
-  { id: "loc-shelley-park", name: "Shelley Park", city: "Bournemouth", country: "United Kingdom", latitude: 50.7220, longitude: -1.8530 },
+  { id: "loc-boscombe-beach", name: "Boscombe Beach", city: "Bournemouth", country: "United Kingdom", latitude: 50.7198, longitude: -1.8400, what3names: null, howToFind: null },
+  { id: "loc-shelley-park", name: "Shelley Park", city: "Bournemouth", country: "United Kingdom", latitude: 50.7220, longitude: -1.8530, what3names: null, howToFind: null },
 ];
 
 const insertLocation = sqlite.prepare(
-  "INSERT OR IGNORE INTO locations (id, name, city, country, latitude, longitude, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  "INSERT OR IGNORE INTO locations (id, name, city, country, latitude, longitude, what3names, how_to_find, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
 );
 for (const l of seedLocations) {
-  insertLocation.run(l.id, l.name, l.city, l.country, l.latitude, l.longitude, "user-dan");
+  insertLocation.run(l.id, l.name, l.city, l.country, l.latitude, l.longitude, l.what3names, l.howToFind, "user-dan");
 }
 
 // ── Seed events (London AcroYoga) ──────────────────────────────────
@@ -152,6 +163,10 @@ const seedEvents = [
     dateTime: "2026-03-08T11:00:00Z",
     endDateTime: "2026-03-08T14:00:00Z",
     locationId: "loc-regents-park",
+    dateAdded: "2026-02-15T08:00:00Z",
+    lastUpdated: "2026-03-01T09:00:00Z",
+    recurrenceType: "weekly",
+    recurrenceEndDate: "2026-06-30T23:59:59Z",
   },
   {
     id: "evt-beginner-workshop",
@@ -161,6 +176,8 @@ const seedEvents = [
     dateTime: "2026-03-14T10:00:00Z",
     endDateTime: "2026-03-14T12:00:00Z",
     locationId: "loc-gym-brixton",
+    dateAdded: "2026-02-16T08:00:00Z",
+    lastUpdated: "2026-03-07T10:00:00Z",
   },
   {
     id: "evt-flight-night",
@@ -170,6 +187,8 @@ const seedEvents = [
     dateTime: "2026-03-20T18:30:00Z",
     endDateTime: "2026-03-20T21:00:00Z",
     locationId: "loc-colombo",
+    dateAdded: "2026-02-17T08:00:00Z",
+    lastUpdated: "2026-03-04T10:30:00Z",
   },
   {
     id: "evt-washing-machine",
@@ -179,6 +198,8 @@ const seedEvents = [
     dateTime: "2026-03-28T14:00:00Z",
     endDateTime: "2026-03-28T17:00:00Z",
     locationId: "loc-laban",
+    dateAdded: "2026-02-18T08:00:00Z",
+    lastUpdated: "2026-03-06T11:00:00Z",
   },
   {
     id: "evt-park-jam-april",
@@ -188,6 +209,8 @@ const seedEvents = [
     dateTime: "2026-04-05T12:00:00Z",
     endDateTime: "2026-04-05T16:00:00Z",
     locationId: "loc-victoria-park",
+    dateAdded: "2026-02-20T08:00:00Z",
+    lastUpdated: "2026-03-02T08:30:00Z",
   },
   // ── New York events (5) ──────────────────────────────────────────
   {
@@ -198,6 +221,10 @@ const seedEvents = [
     dateTime: "2026-03-15T14:00:00Z",
     endDateTime: "2026-03-15T17:00:00Z",
     locationId: "loc-central-park",
+    dateAdded: "2026-03-02T08:00:00Z",
+    lastUpdated: "2026-03-15T09:00:00Z",
+    recurrenceType: "weekly",
+    recurrenceEndDate: "2026-07-01T23:59:59Z",
   },
   {
     id: "evt-ny-beginner-intro",
@@ -207,6 +234,8 @@ const seedEvents = [
     dateTime: "2026-03-22T11:00:00Z",
     endDateTime: "2026-03-22T13:00:00Z",
     locationId: "loc-central-park",
+    dateAdded: "2026-03-02T08:30:00Z",
+    lastUpdated: "2026-03-15T09:30:00Z",
   },
   {
     id: "evt-ny-prospect-flow",
@@ -216,6 +245,8 @@ const seedEvents = [
     dateTime: "2026-03-29T10:00:00Z",
     endDateTime: "2026-03-29T12:30:00Z",
     locationId: "loc-prospect-park",
+    dateAdded: "2026-03-02T09:00:00Z",
+    lastUpdated: "2026-03-15T10:00:00Z",
   },
   {
     id: "evt-ny-domino-sunset",
@@ -225,6 +256,8 @@ const seedEvents = [
     dateTime: "2026-04-04T17:30:00Z",
     endDateTime: "2026-04-04T20:00:00Z",
     locationId: "loc-domino-park",
+    dateAdded: "2026-03-03T09:30:00Z",
+    lastUpdated: "2026-03-16T18:00:00Z",
   },
   {
     id: "evt-ny-spring-festival",
@@ -234,6 +267,8 @@ const seedEvents = [
     dateTime: "2026-04-12T10:00:00Z",
     endDateTime: "2026-04-12T18:00:00Z",
     locationId: "loc-prospect-park",
+    dateAdded: "2026-03-03T10:00:00Z",
+    lastUpdated: "2026-03-16T12:00:00Z",
   },
   // ── Bristol events (3) ───────────────────────────────────────────
   {
@@ -244,6 +279,10 @@ const seedEvents = [
     dateTime: "2026-03-16T11:00:00Z",
     endDateTime: "2026-03-16T14:00:00Z",
     locationId: "loc-castle-park",
+    dateAdded: "2026-03-03T11:00:00Z",
+    lastUpdated: "2026-03-04T12:00:00Z",
+    recurrenceType: "weekly",
+    recurrenceEndDate: "2026-05-31T23:59:59Z",
   },
   {
     id: "evt-bristol-motion-workshop",
@@ -253,6 +292,8 @@ const seedEvents = [
     dateTime: "2026-03-23T14:00:00Z",
     endDateTime: "2026-03-23T16:00:00Z",
     locationId: "loc-the-motion",
+    dateAdded: "2026-03-03T11:30:00Z",
+    lastUpdated: "2026-03-04T12:30:00Z",
   },
   {
     id: "evt-bristol-spring-jam",
@@ -262,6 +303,8 @@ const seedEvents = [
     dateTime: "2026-04-06T12:00:00Z",
     endDateTime: "2026-04-06T15:00:00Z",
     locationId: "loc-castle-park",
+    dateAdded: "2026-03-03T12:00:00Z",
+    lastUpdated: "2026-03-04T13:00:00Z",
   },
   // ── Bournemouth events (2) ───────────────────────────────────────
   {
@@ -272,6 +315,8 @@ const seedEvents = [
     dateTime: "2026-03-21T10:00:00Z",
     endDateTime: "2026-03-21T13:00:00Z",
     locationId: "loc-boscombe-beach",
+    dateAdded: "2026-03-05T11:00:00Z",
+    lastUpdated: "2026-03-06T12:00:00Z",
   },
   {
     id: "evt-bournemouth-park-session",
@@ -281,14 +326,27 @@ const seedEvents = [
     dateTime: "2026-04-13T11:00:00Z",
     endDateTime: "2026-04-13T14:00:00Z",
     locationId: "loc-shelley-park",
+    dateAdded: "2026-03-05T11:30:00Z",
+    lastUpdated: "2026-03-06T12:30:00Z",
   },
 ];
 
 const insertEvent = sqlite.prepare(
-  "INSERT OR IGNORE INTO events (id, title, description, date_time, end_date_time, location_id, status, created_by) VALUES (?, ?, ?, ?, ?, ?, 'approved', 'user-dan')"
+  "INSERT OR IGNORE INTO events (id, title, description, date_time, end_date_time, location_id, status, created_by, date_added, last_updated, recurrence_type, recurrence_end_date) VALUES (?, ?, ?, ?, ?, ?, 'approved', 'user-dan', ?, ?, ?, ?)"
 );
 for (const e of seedEvents) {
-  insertEvent.run(e.id, e.title, e.description, e.dateTime, e.endDateTime, e.locationId);
+  insertEvent.run(
+    e.id,
+    e.title,
+    e.description,
+    e.dateTime,
+    e.endDateTime,
+    e.locationId,
+    e.dateAdded,
+    e.lastUpdated,
+    e.recurrenceType ?? "none",
+    e.recurrenceEndDate ?? null,
+  );
 }
 
 // ── Seed RSVPs ──────────────────────────────────────────────────────

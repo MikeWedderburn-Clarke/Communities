@@ -33,6 +33,7 @@ export async function getUserProfile(db: Db, userId: string): Promise<UserProfil
     showYoutube: user.showYoutube,
     homeCity: user.homeCity ?? null,
     useCurrentLocation: user.useCurrentLocation,
+    lastLogin: user.lastLogin ?? null,
   };
 }
 
@@ -87,6 +88,13 @@ export async function updateUserProfile(db: Db, userId: string, data: ProfileUpd
       homeCity: data.homeCity,
       useCurrentLocation: data.useCurrentLocation,
     })
+    .where(eq(schema.users.id, userId));
+}
+
+export async function recordLastLogin(db: Db, userId: string): Promise<void> {
+  await db
+    .update(schema.users)
+    .set({ lastLogin: new Date().toISOString() })
     .where(eq(schema.users.id, userId));
 }
 
