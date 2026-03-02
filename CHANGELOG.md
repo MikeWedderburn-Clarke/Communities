@@ -6,6 +6,9 @@ All notable changes to this project are documented here.
 
 ## 2026-03-02
 
+- Add combined tree+map view: collapsible Country → City hierarchy on the left, synced Leaflet map on the right; clicking either panel zooms/expands the other; expanded city shows all events with role badges, skill level, and cost
+- Fix `db/index.ts` to load dotenv before creating the pg Pool, so `db:seed` and `db:migrate` work without manually prefixing `DATABASE_URL`
+- README rewritten: docker compose workflow, all npm scripts, current project structure, deployment guide
 - Add `docker-compose.yml` with named `pgdata` volume; local Postgres now persists across container restarts — no reseed required after `docker compose up`
 - Install `dotenv` (devDep); `drizzle.config.ts` and `seed.ts` now auto-load `.env.local` so `db:migrate` and `db:seed` work without manually prefixing `DATABASE_URL`
 - Add `db:dump` and `db:restore` npm scripts (via `docker exec`) for local backups and data portability

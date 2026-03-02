@@ -1,12 +1,30 @@
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
+import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { config } from "dotenv";
 import * as schema from "./schema";
-import path from "path";
 
-const DB_PATH = process.env.DB_PATH ?? path.join(process.cwd(), "community.db");
+// Load .env.local for standalone scripts (seed, migrate). In the Next.js app
+// and in CI, DATABASE_URL is already set; dotenv will not override it.
+config({ path: ".env.local", override: false });
 
-const sqlite = new Database(DB_PATH);
-sqlite.pragma("journal_mode = WAL");
-sqlite.pragma("foreign_keys = ON");
+// Use a global singleton to prevent multiple pool instances during Next.js hot reloads.
+declare global {
+  // eslint-disable-next-line no-var
+  var __db_pool: Pool | undefined;
+}
 
-export const db = drizzle(sqlite, { schema });
+export const pool =
+  globalThis.__db_pool ??
+  new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ...(process.env.NODE_ENV === "production" && { ssl: true }),
+  });
+
+if (process.env.NODE_ENV !== "production") {
+  globalThis.__db_pool = pool;
+}
+
+export const db = drizzle(pool, { schema });
+
+/** Portable DB type — import this instead of driver-specific types. */
+export type Db = typeof db;

@@ -17,12 +17,12 @@ export default async function EventsPage({ searchParams }: Props) {
   const rsvpMap = user ? await getUserRsvpMap(db, user.id) : {};
   const events = rawEvents.map((e) => ({ ...e, userRsvp: rsvpMap[e.id] ?? null }));
 
-  const initialView = view === "map" ? "map" : "list";
+  const initialView = view === "map" ? "map" : view === "combined" ? "combined" : "list";
   const homeCity = city ?? user?.homeCity ?? null;
-  const lastLogin = user?.lastLogin ?? null;
+  const lastLogin = user?.freshSince ?? null;
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-8">
+    <main className={`mx-auto px-4 py-8 ${initialView === "combined" ? "max-w-7xl" : "max-w-4xl"}`}>
       <h1 className="text-3xl font-bold">Events</h1>
       <p className="mt-1 text-gray-600">
         AcroYoga jams, workshops, and meetups
