@@ -2,13 +2,17 @@ import { notFound } from "next/navigation";
 import { RoleBadges } from "@/components/role-badges";
 import { SocialIcons } from "@/components/social-icons";
 import { getEventDetail } from "@/services/events";
+import { getEventGroupForEvent } from "@/services/event-groups";
+import { getTicketTypesForEvent } from "@/services/ticket-types";
+import { getUserBookingForEvent } from "@/services/bookings";
 import { getCurrentUser } from "@/lib/auth";
 import { buildExternalMapLinks } from "@/lib/map-links";
-import { isEventFresh } from "@/lib/event-utils";
+import { isEventNew } from "@/lib/event-utils";
 import { formatRecurrenceSummary } from "@/lib/recurrence";
 import { formatCost } from "@/lib/format-cost";
 import { db } from "@/db";
 import { RsvpForm } from "./rsvp-form";
+import { TicketSelector } from "@/components/ticket-selector";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -27,12 +31,25 @@ export default async function EventDetailPage({
 
   if (!event) notFound();
 
+  // Fetch group membership and ticket types in parallel
+  const [group, ticketTypes] = await Promise.all([
+    getEventGroupForEvent(db, id, user?.isAdmin ?? false),
+    getTicketTypesForEvent(db, id),
+  ]);
+
+  // Fetch user's active booking for this event (if any)
+  const userBooking = user && ticketTypes.length > 0
+    ? await getUserBookingForEvent(db, user.id, id)
+    : null;
+
+  const hasTicketTypes = ticketTypes.length > 0;
+
   const mapLinks = buildExternalMapLinks({
     latitude: event.location.latitude,
     longitude: event.location.longitude,
     what3names: event.location.what3names,
   });
-  const freshSinceLogin = isEventFresh(event, user?.lastLogin ?? null);
+  const freshSinceLogin = isEventNew(event, user?.freshSince ?? null);
   const upcoming = event.nextOccurrence ?? { dateTime: event.dateTime, endDateTime: event.endDateTime };
   const recurrenceSummary = formatRecurrenceSummary(event.recurrence);
 
@@ -59,6 +76,16 @@ export default async function EventDetailPage({
           </>
         )}
       </nav>
+
+      {/* Group membership banner */}
+      {group && (
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm">
+          <span className="text-indigo-500">Part of</span>
+          <Link href={`/groups/${group.id}`} className="font-semibold text-indigo-700 hover:underline">
+            {group.name}
+          </Link>
+        </div>
+      )}
 
         <h1 className="mt-4 text-3xl font-bold">{event.title}</h1>
         <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
@@ -176,49 +203,76 @@ export default async function EventDetailPage({
           )}
         </section>
 
-        {/* RSVP section */}
+        {/* RSVP / Booking section */}
         <section className="mt-6 rounded-lg border border-gray-200 bg-white p-5">
-          {/* Cost — always visible */}
-          {event.costAmount !== null && (
-            <p className="mb-4 text-sm font-medium text-gray-700">
-              Cost:{" "}
-              <span className="text-gray-900">{formatCost(event.costAmount, event.costCurrency)}</span>
-              {event.concessionAmount !== null && (
-                <span className="ml-2 text-gray-500">
-                  ({formatCost(event.concessionAmount, event.costCurrency)} concession)
-                </span>
-              )}
-            </p>
-          )}
-          {user ? (
-            <>
-              <h2 className="font-semibold">
-                {event.currentUserRsvp ? "Update your RSVP" : "RSVP"}
-              </h2>
-              <RsvpForm
+          {hasTicketTypes ? (
+            /* Ticket-based booking flow */
+            user ? (
+              <TicketSelector
+                ticketTypes={ticketTypes}
+                existingBooking={userBooking}
+                groupId={group?.id ?? ""}
                 eventId={event.id}
-                currentRsvp={event.currentUserRsvp}
-                isTeacherApproved={user?.isTeacherApproved ?? false}
-                defaultRole={user?.defaultRole ?? null}
-                defaultShowName={user?.defaultShowName ?? null}
-                prerequisites={event.prerequisites}
-                costAmount={event.costAmount}
-                costCurrency={event.costCurrency}
-                concessionAmount={event.concessionAmount}
               />
-            </>
+            ) : (
+              <div>
+                <h2 className="font-semibold">Tickets</h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  <Link
+                    href={`/login?redirect=/events/${event.id}`}
+                    className="rounded bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700 inline-block mt-2"
+                  >
+                    Log in to book tickets
+                  </Link>
+                </p>
+              </div>
+            )
           ) : (
-            <div>
-              <h2 className="font-semibold">Want to join?</h2>
-              <p className="mt-1 text-sm text-gray-600">
-                <Link
-                  href={`/login?redirect=/events/${event.id}`}
-                  className="rounded bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700 inline-block mt-2"
-                >
-                  Log in to RSVP
-                </Link>
-              </p>
-            </div>
+            /* Standard RSVP flow */
+            <>
+              {/* Cost — always visible */}
+              {event.costAmount !== null && (
+                <p className="mb-4 text-sm font-medium text-gray-700">
+                  Cost:{" "}
+                  <span className="text-gray-900">{formatCost(event.costAmount, event.costCurrency)}</span>
+                  {event.concessionAmount !== null && (
+                    <span className="ml-2 text-gray-500">
+                      ({formatCost(event.concessionAmount, event.costCurrency)} concession)
+                    </span>
+                  )}
+                </p>
+              )}
+              {user ? (
+                <>
+                  <h2 className="font-semibold">
+                    {event.currentUserRsvp ? "Update your RSVP" : "RSVP"}
+                  </h2>
+                  <RsvpForm
+                    eventId={event.id}
+                    currentRsvp={event.currentUserRsvp}
+                    isTeacherApproved={user?.isTeacherApproved ?? false}
+                    defaultRole={user?.defaultRole ?? null}
+                    defaultShowName={user?.defaultShowName ?? null}
+                    prerequisites={event.prerequisites}
+                    costAmount={event.costAmount}
+                    costCurrency={event.costCurrency}
+                    concessionAmount={event.concessionAmount}
+                  />
+                </>
+              ) : (
+                <div>
+                  <h2 className="font-semibold">Want to join?</h2>
+                  <p className="mt-1 text-sm text-gray-600">
+                    <Link
+                      href={`/login?redirect=/events/${event.id}`}
+                      className="rounded bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700 inline-block mt-2"
+                    >
+                      Log in to RSVP
+                    </Link>
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </section>
 

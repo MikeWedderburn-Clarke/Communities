@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import { SKILL_LEVELS, CURRENCIES, type Location, type SkillLevel } from "@/types";
 
 /* ── Nominatim geocoding types ────────────────────────────────── */
@@ -25,10 +24,15 @@ interface NominatimResult {
 }
 
 export default function CreateEventPage() {
-  const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [submittedEventId, setSubmittedEventId] = useState<string | null>(null);
+  const [submittedTitle, setSubmittedTitle] = useState<string | null>(null);
+  const [submittedDescription, setSubmittedDescription] = useState<string | null>(null);
+  const [submittedDateTime, setSubmittedDateTime] = useState<string | null>(null);
+  const [submittedLocationName, setSubmittedLocationName] = useState<string | null>(null);
+  const [submittedCity, setSubmittedCity] = useState<string | null>(null);
   const tomorrowIso = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
 
   // Location state
@@ -211,6 +215,8 @@ export default function CreateEventPage() {
     setSubmitting(true);
 
     const form = new FormData(e.currentTarget);
+    const title = form.get("title") as string;
+    const description = form.get("description") as string;
     const dateTime = `${form.get("date")}T${form.get("startTime")}:00Z`;
     const endDateTime = `${form.get("date")}T${form.get("endTime")}:00Z`;
 
@@ -225,8 +231,8 @@ export default function CreateEventPage() {
         : null;
 
     const body = {
-      title: form.get("title"),
-      description: form.get("description"),
+      title,
+      description,
       dateTime,
       endDateTime,
       locationId: selectedLocation.id,
@@ -257,10 +263,13 @@ export default function CreateEventPage() {
         return;
       }
 
+      setSubmittedEventId(data.eventId);
+      setSubmittedTitle(title);
+      setSubmittedDescription(description);
+      setSubmittedDateTime(dateTime);
+      setSubmittedLocationName(selectedLocation.name);
+      setSubmittedCity(selectedLocation.city);
       setSuccess(data.message);
-      if (data.status === "approved") {
-        setTimeout(() => router.push(`/events/${data.eventId}`), 1500);
-      }
     } catch {
       setError("Network error — please try again.");
     } finally {
@@ -268,22 +277,70 @@ export default function CreateEventPage() {
     }
   }
 
+  if (success) {
+    return (
+      <main className="mx-auto max-w-2xl px-4 py-8">
+        <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+          <p className="font-semibold text-green-900">Event submitted!</p>
+          <p className="mt-1 text-sm text-green-800">{success}</p>
+        </div>
+
+        <div className="mt-6 rounded-xl border-2 border-gray-200 bg-white p-5 shadow-sm">
+          <h2 className="text-xl font-bold text-gray-900">{submittedTitle}</h2>
+          {submittedLocationName && (
+            <p className="mt-1 text-sm text-gray-500">
+              {submittedLocationName}{submittedCity ? `, ${submittedCity}` : ""}
+            </p>
+          )}
+          {submittedDateTime && (
+            <p className="mt-1 text-sm font-medium text-indigo-600">
+              {new Date(submittedDateTime).toLocaleString("en-GB", {
+                weekday: "long", day: "numeric", month: "long", year: "numeric",
+                hour: "2-digit", minute: "2-digit",
+              })}
+            </p>
+          )}
+          {submittedDescription && (
+            <p className="mt-3 whitespace-pre-wrap text-sm text-gray-700">{submittedDescription}</p>
+          )}
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-3">
+          {submittedEventId && (
+            <a
+              href={`/events/${submittedEventId}`}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              View Event
+            </a>
+          )}
+          <a
+            href="/events/create"
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Submit Another
+          </a>
+          <a
+            href="/events"
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Back to Events
+          </a>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
       <h1 className="text-3xl font-bold">Create Event</h1>
       <p className="mt-1 text-gray-600">
-        Submit a new AcroYoga event. Admin-created events go live instantly;
-        others are held for review.
+        Submit a new AcroYoga event. New events will need to be approved by an admin (usually a few hours)
       </p>
 
       {error && (
         <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {error}
-        </div>
-      )}
-      {success && (
-        <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">
-          {success}
         </div>
       )}
 
@@ -490,7 +547,9 @@ export default function CreateEventPage() {
                   if (next === "none") {
                     setRecurrenceEndDate("");
                   } else if (!recurrenceEndDate) {
-                    setRecurrenceEndDate(eventDate);
+                    const d = new Date(eventDate + "T00:00:00");
+                    d.setMonth(d.getMonth() + 6);
+                    setRecurrenceEndDate(d.toISOString().slice(0, 10));
                   }
                 }}
                 className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"

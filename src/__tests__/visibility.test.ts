@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { eq } from "drizzle-orm";
-import { createTestDb } from "@/db/test-utils";
+import { createTestDb, resetDb } from "@/db/test-utils";
 import {
   getEventDetail,
   createOrUpdateRsvp,
@@ -17,26 +17,26 @@ import {
 } from "@/services/events";
 import * as schema from "@/db/schema";
 
-type TestDb = ReturnType<typeof createTestDb>;
+type TestDb = Awaited<ReturnType<typeof createTestDb>>;
 
-function seedTestData(db: TestDb) {
-  db.insert(schema.users).values([
+async function seedTestData(db: TestDb) {
+  await db.insert(schema.users).values([
     { id: "u1", name: "Alice", email: "alice@test.com", isAdmin: false },
     { id: "u2", name: "Bob", email: "bob@test.com", isAdmin: false },
     { id: "u3", name: "Carol", email: "carol@test.com", isAdmin: false },
     { id: "u-admin", name: "Dan", email: "dan@test.com", isAdmin: true },
-  ]).run();
+  ]);
 
-  db.insert(schema.locations).values({
+  await db.insert(schema.locations).values({
     id: "loc-test",
     name: "Test Venue",
     city: "London",
     country: "United Kingdom",
     latitude: 51.5074,
     longitude: -0.1278,
-  }).run();
+  });
 
-  db.insert(schema.events).values({
+  await db.insert(schema.events).values({
     id: "e1",
     title: "Test Jam",
     description: "A test event",
@@ -46,15 +46,23 @@ function seedTestData(db: TestDb) {
     status: "approved",
     dateAdded: "2026-02-01T10:00:00Z",
     lastUpdated: "2026-02-01T10:00:00Z",
-  }).run();
+  });
 }
 
 describe("event detail visibility rules", () => {
   let db: TestDb;
 
-  beforeEach(() => {
-    db = createTestDb();
-    seedTestData(db);
+  beforeAll(async () => {
+    db = await createTestDb();
+  });
+
+  afterAll(async () => {
+    await (db as any).$pglite?.close();
+  });
+
+  beforeEach(async () => {
+    await resetDb(db);
+    await seedTestData(db);
   });
 
   it("does NOT expose names to anonymous users", async () => {
@@ -171,9 +179,17 @@ describe("event detail visibility rules", () => {
 describe("RSVP create/update/delete", () => {
   let db: TestDb;
 
-  beforeEach(() => {
-    db = createTestDb();
-    seedTestData(db);
+  beforeAll(async () => {
+    db = await createTestDb();
+  });
+
+  afterAll(async () => {
+    await (db as any).$pglite?.close();
+  });
+
+  beforeEach(async () => {
+    await resetDb(db);
+    await seedTestData(db);
   });
 
   it("creates an RSVP", async () => {
@@ -222,9 +238,17 @@ describe("RSVP create/update/delete", () => {
 describe("role aggregation in event list", () => {
   let db: TestDb;
 
-  beforeEach(() => {
-    db = createTestDb();
-    seedTestData(db);
+  beforeAll(async () => {
+    db = await createTestDb();
+  });
+
+  afterAll(async () => {
+    await (db as any).$pglite?.close();
+  });
+
+  beforeEach(async () => {
+    await resetDb(db);
+    await seedTestData(db);
   });
 
   it("shows correct role counts in event summary", async () => {
@@ -266,9 +290,17 @@ describe("role aggregation in event list", () => {
 describe("teacher request/approval flow", () => {
   let db: TestDb;
 
-  beforeEach(() => {
-    db = createTestDb();
-    seedTestData(db);
+  beforeAll(async () => {
+    db = await createTestDb();
+  });
+
+  afterAll(async () => {
+    await (db as any).$pglite?.close();
+  });
+
+  beforeEach(async () => {
+    await resetDb(db);
+    await seedTestData(db);
   });
 
   it("creates a teacher request", async () => {
@@ -327,9 +359,17 @@ describe("teacher request/approval flow", () => {
 describe("event creation and approval flow", () => {
   let db: TestDb;
 
-  beforeEach(() => {
-    db = createTestDb();
-    seedTestData(db);
+  beforeAll(async () => {
+    db = await createTestDb();
+  });
+
+  afterAll(async () => {
+    await (db as any).$pglite?.close();
+  });
+
+  beforeEach(async () => {
+    await resetDb(db);
+    await seedTestData(db);
   });
 
   const eventInput = {
@@ -408,13 +448,21 @@ describe("event creation and approval flow", () => {
 describe("recurrence-aware listings", () => {
   let db: TestDb;
 
-  beforeEach(() => {
-    db = createTestDb();
-    seedTestData(db);
+  beforeAll(async () => {
+    db = await createTestDb();
+  });
+
+  afterAll(async () => {
+    await (db as any).$pglite?.close();
+  });
+
+  beforeEach(async () => {
+    await resetDb(db);
+    await seedTestData(db);
   });
 
   it("past single events are included in getAllEvents but tagged isPast", async () => {
-    db.insert(schema.events).values({
+    await db.insert(schema.events).values({
       id: "evt-past",
       title: "Old Jam",
       description: "already happened",
@@ -426,7 +474,7 @@ describe("recurrence-aware listings", () => {
       lastUpdated: "2019-12-01T10:00:00Z",
       recurrenceType: "none",
       recurrenceEndDate: null,
-    }).run();
+    });
 
     const events = await getAllEvents(db);
     const past = events.find((e) => e.id === "evt-past");
@@ -435,7 +483,7 @@ describe("recurrence-aware listings", () => {
   });
 
   it("surfaces recurring events even if their first instance is past", async () => {
-    db.insert(schema.events).values({
+    await db.insert(schema.events).values({
       id: "evt-recurring",
       title: "Weekly Flow",
       description: "keeps happening",
@@ -447,7 +495,7 @@ describe("recurrence-aware listings", () => {
       lastUpdated: "2023-12-01T10:00:00Z",
       recurrenceType: "weekly",
       recurrenceEndDate: "2026-12-31T23:59:59Z",
-    }).run();
+    });
 
     const events = await getAllEvents(db);
     const recurring = events.find((e) => e.id === "evt-recurring");

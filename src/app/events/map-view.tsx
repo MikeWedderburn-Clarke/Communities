@@ -3,12 +3,13 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { RoleBadges } from "@/components/role-badges";
-import { buildLocationHierarchy } from "@/lib/location-hierarchy";
+import { buildLocationHierarchy, getContinent } from "@/lib/location-hierarchy";
 import { formatRecurrenceSummary } from "@/lib/recurrence";
 import type { EventSummary } from "@/types";
 
 type DrillLevel =
   | { level: "globe" }
+  | { level: "continent"; continent: string }
   | { level: "country"; country: string }
   | { level: "city"; country: string; city: string }
   | { level: "venue"; country: string; city: string; venue: string };
@@ -27,26 +28,51 @@ export function MapView({ events }: Props) {
       <div className="mt-4">
         {drill.level === "globe" && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {hierarchy.map((country) => (
+            {hierarchy.map((continentGroup) => (
               <button
-                key={country.country}
-                onClick={() => setDrill({ level: "country", country: country.country })}
+                key={continentGroup.continent}
+                onClick={() => setDrill({ level: "continent", continent: continentGroup.continent })}
                 className="rounded-lg border border-gray-200 bg-white p-5 text-left shadow-sm transition hover:border-indigo-300 hover:shadow-md"
               >
-                <h3 className="text-lg font-semibold">{country.country}</h3>
+                <h3 className="text-lg font-semibold">{continentGroup.continent}</h3>
                 <p className="mt-1 text-sm text-gray-600">
-                  {country.eventCount} {country.eventCount === 1 ? "event" : "events"}
+                  {continentGroup.eventCount} {continentGroup.eventCount === 1 ? "event" : "events"}
                 </p>
                 <p className="text-sm text-gray-500">
-                  {country.cities.length} {country.cities.length === 1 ? "city" : "cities"}
+                  {continentGroup.countries.length} {continentGroup.countries.length === 1 ? "country" : "countries"}
                 </p>
               </button>
             ))}
           </div>
         )}
 
+        {drill.level === "continent" && (() => {
+          const continentGroup = hierarchy.find((c) => c.continent === drill.continent);
+          if (!continentGroup) return <p className="text-gray-500">Continent not found.</p>;
+          return (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {continentGroup.countries.map((country) => (
+                <button
+                  key={country.country}
+                  onClick={() => setDrill({ level: "country", country: country.country })}
+                  className="rounded-lg border border-gray-200 bg-white p-5 text-left shadow-sm transition hover:border-indigo-300 hover:shadow-md"
+                >
+                  <h3 className="text-lg font-semibold">{country.country}</h3>
+                  <p className="mt-1 text-sm text-gray-600">
+                    {country.eventCount} {country.eventCount === 1 ? "event" : "events"}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {country.cities.length} {country.cities.length === 1 ? "city" : "cities"}
+                  </p>
+                </button>
+              ))}
+            </div>
+          );
+        })()}
+
         {drill.level === "country" && (() => {
-          const country = hierarchy.find((c) => c.country === drill.country);
+          const continentGroup = hierarchy.find((c) => c.continent === getContinent(drill.country));
+          const country = continentGroup?.countries.find((c) => c.country === drill.country);
           if (!country) return <p className="text-gray-500">Country not found.</p>;
           return (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -70,7 +96,8 @@ export function MapView({ events }: Props) {
         })()}
 
         {drill.level === "city" && (() => {
-          const country = hierarchy.find((c) => c.country === drill.country);
+          const continentGroup = hierarchy.find((c) => c.continent === getContinent(drill.country));
+          const country = continentGroup?.countries.find((c) => c.country === drill.country);
           const city = country?.cities.find((ci) => ci.city === drill.city);
           if (!city) return <p className="text-gray-500">City not found.</p>;
           return (
@@ -92,7 +119,8 @@ export function MapView({ events }: Props) {
         })()}
 
         {drill.level === "venue" && (() => {
-          const country = hierarchy.find((c) => c.country === drill.country);
+          const continentGroup = hierarchy.find((c) => c.continent === getContinent(drill.country));
+          const country = continentGroup?.countries.find((c) => c.country === drill.country);
           const city = country?.cities.find((ci) => ci.city === drill.city);
           const venue = city?.venues.find((v) => v.venue === drill.venue);
           if (!venue) return <p className="text-gray-500">Venue not found.</p>;
@@ -146,6 +174,13 @@ function Breadcrumbs({ drill, onNavigate }: { drill: DrillLevel; onNavigate: (d:
     crumbs.push({ label: "All locations" });
   } else {
     crumbs.push({ label: "All locations", action: () => onNavigate({ level: "globe" }) });
+  }
+
+  if (drill.level === "continent") {
+    crumbs.push({ label: drill.continent });
+  } else if (drill.level === "country" || drill.level === "city" || drill.level === "venue") {
+    const continent = getContinent(drill.country);
+    crumbs.push({ label: continent, action: () => onNavigate({ level: "continent", continent }) });
   }
 
   if (drill.level === "country") {

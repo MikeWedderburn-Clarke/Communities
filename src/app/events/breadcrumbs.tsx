@@ -2,6 +2,7 @@
 
 interface BreadcrumbItem {
   label: string;
+  count?: number;
   action?: () => void;
   active?: boolean;
 }
@@ -23,11 +24,11 @@ export function BreadcrumbNav({ items }: Props) {
                 onClick={item.action}
                 className="rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-indigo-600 hover:bg-indigo-50"
               >
-                {item.label}
+                {item.label}{item.count !== undefined ? ` (${item.count})` : ""}
               </button>
             ) : (
               <span className={`px-2 py-1 text-xs font-semibold ${isLast ? "text-gray-900" : "text-gray-500"}`}>
-                {item.label}
+                {item.label}{item.count !== undefined ? ` (${item.count})` : ""}
               </span>
             )}
             {index < items.length - 1 && <span className="text-gray-300">›</span>}

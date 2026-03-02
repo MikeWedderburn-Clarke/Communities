@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { createTestDb } from "@/db/test-utils";
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import { createTestDb, resetDb } from "@/db/test-utils";
 import * as schema from "@/db/schema";
 import {
   getUserProfile,
@@ -8,10 +8,10 @@ import {
   validateProfileInput,
 } from "@/services/users";
 
-type TestDb = ReturnType<typeof createTestDb>;
+type TestDb = Awaited<ReturnType<typeof createTestDb>>;
 
-function seedUser(db: TestDb) {
-  db.insert(schema.users).values({
+async function seedUser(db: TestDb) {
+  await db.insert(schema.users).values({
     id: "u1",
     name: "Alice",
     email: "alice@test.com",
@@ -26,15 +26,23 @@ function seedUser(db: TestDb) {
     showInstagram: false,
     showWebsite: true,
     showYoutube: false,
-  }).run();
+  });
 }
 
 describe("getUserProfile", () => {
   let db: TestDb;
 
-  beforeEach(() => {
-    db = createTestDb();
-    seedUser(db);
+  beforeAll(async () => {
+    db = await createTestDb();
+  });
+
+  afterAll(async () => {
+    await (db as any).$pglite?.close();
+  });
+
+  beforeEach(async () => {
+    await resetDb(db);
+    await seedUser(db);
   });
 
   it("returns full profile data for existing user", async () => {
@@ -70,9 +78,17 @@ describe("getUserProfile", () => {
 describe("getPublicProfile", () => {
   let db: TestDb;
 
-  beforeEach(() => {
-    db = createTestDb();
-    seedUser(db);
+  beforeAll(async () => {
+    db = await createTestDb();
+  });
+
+  afterAll(async () => {
+    await (db as any).$pglite?.close();
+  });
+
+  beforeEach(async () => {
+    await resetDb(db);
+    await seedUser(db);
   });
 
   it("only returns social links where show* is true", async () => {
@@ -114,9 +130,17 @@ describe("getPublicProfile", () => {
 describe("updateUserProfile", () => {
   let db: TestDb;
 
-  beforeEach(() => {
-    db = createTestDb();
-    seedUser(db);
+  beforeAll(async () => {
+    db = await createTestDb();
+  });
+
+  afterAll(async () => {
+    await (db as any).$pglite?.close();
+  });
+
+  beforeEach(async () => {
+    await resetDb(db);
+    await seedUser(db);
   });
 
   it("updates and persists profile fields", async () => {

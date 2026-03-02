@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { RoleBadges } from "@/components/role-badges";
 import { formatRecurrenceSummary } from "@/lib/recurrence";
-import { isEventFresh } from "@/lib/event-utils";
+import { isEventNew, isEventUpdated } from "@/lib/event-utils";
+import { getEventDay, DAY_CARD_CLS } from "@/lib/day-utils";
 import type { EventSummary } from "@/types";
 
 interface Props {
@@ -12,46 +13,41 @@ interface Props {
   from?: "list" | "map";
 }
 
-type CardStatus = "past" | "full" | "new" | "toPay" | "booked" | "default";
+type CardStatus = "past" | "full" | "new" | "updated" | "toPay" | "booked" | "default";
 
 function getCardStatus(event: EventSummary, lastLogin: string | null): CardStatus {
   if (event.isPast) return "past";
   if (event.isFull) return "full";
-  if (isEventFresh(event, lastLogin)) return "new";
+  if (isEventNew(event, lastLogin)) return "new";
+  if (isEventUpdated(event, lastLogin)) return "updated";
   if (event.userRsvp && (event.costAmount ?? 0) > 0 && !event.userRsvp.paymentStatus) return "toPay";
   if (event.userRsvp) return "booked";
   return "default";
 }
 
-const STATUS_STYLES: Record<CardStatus, string> = {
-  past:    "border-2 border-orange-400 bg-orange-50/60",
-  full:    "border-2 border-red-400 bg-red-50/60",
-  new:     "border-2 border-blue-400 bg-blue-50/60",
-  toPay:   "border-2 border-yellow-400 bg-yellow-50/60",
-  booked:  "border-2 border-green-400 bg-green-50/60",
-  default: "border border-gray-200 bg-white",
-};
-
-const STATUS_LABELS: Record<CardStatus, { text: string; cls: string } | null> = {
-  past:    { text: "Past",    cls: "text-orange-600" },
-  full:    { text: "Full",    cls: "text-red-600" },
-  new:     { text: "New",     cls: "text-blue-600" },
-  toPay:   { text: "To Pay",  cls: "text-yellow-700" },
-  booked:  { text: "Booked",  cls: "text-green-700" },
+const STATUS_LABELS: Record<CardStatus, string | null> = {
+  past:    "Past",
+  full:    "Full",
+  new:     "New",
+  updated: "Updated",
+  toPay:   "To Pay",
+  booked:  "Booked",
   default: null,
 };
 
 export function EventCard({ event, lastLogin, from = "list" }: Props) {
   const status = getCardStatus(event, lastLogin);
-  const label = STATUS_LABELS[status];
+  const labelText = STATUS_LABELS[status];
   const upcoming = event.nextOccurrence ?? { dateTime: event.dateTime, endDateTime: event.endDateTime };
   const recurrenceSummary = formatRecurrenceSummary(event.recurrence);
+  const day = getEventDay(event);
+  const dayCls = DAY_CARD_CLS[day];
 
   return (
     <li>
       <Link
         href={`/events/${event.id}?from=${from}`}
-        className={`block rounded-lg px-5 py-4 shadow-sm transition hover:shadow-md ${STATUS_STYLES[status]}`}
+        className={`block rounded-lg px-5 py-4 shadow-sm transition hover:shadow-md border-2 ${dayCls}`}
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
@@ -65,9 +61,9 @@ export function EventCard({ event, lastLogin, from = "list" }: Props) {
             )}
           </div>
           <div className="shrink-0 text-right">
-            {label && (
-              <span className={`text-xs font-semibold uppercase tracking-wider ${label.cls}`}>
-                {label.text}
+            {labelText && (
+              <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                {labelText}
               </span>
             )}
             <p className="text-sm font-medium text-indigo-600">{event.attendeeCount} going</p>

@@ -1,10 +1,8 @@
-import { eq } from "drizzle-orm";
-import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import { eq, sql } from "drizzle-orm";
+import type { Db } from "@/db";
 import * as schema from "@/db/schema";
 import type { UserProfile, PublicProfile, Role } from "@/types";
 import { ROLES } from "@/types";
-
-type Db = BetterSQLite3Database<typeof schema>;
 
 export async function getUserProfile(db: Db, userId: string): Promise<UserProfile | null> {
   const [user] = await db
@@ -94,7 +92,10 @@ export async function updateUserProfile(db: Db, userId: string, data: ProfileUpd
 export async function recordLastLogin(db: Db, userId: string): Promise<void> {
   await db
     .update(schema.users)
-    .set({ lastLogin: new Date().toISOString() })
+    .set({
+      previousLogin: sql`last_login`,
+      lastLogin: new Date().toISOString(),
+    })
     .where(eq(schema.users.id, userId));
 }
 

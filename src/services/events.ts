@@ -1,10 +1,8 @@
 import { eq, and, isNotNull } from "drizzle-orm";
-import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import type { Db } from "@/db";
 import * as schema from "@/db/schema";
 import { computeNextOccurrence } from "@/lib/recurrence";
 import type { EventSummary, EventDetail, RoleCounts, Role, SkillLevel, TeacherRequest, PendingEvent, EventStatus, CreateEventInput, Location, RecurrenceRule } from "@/types";
-
-type Db = BetterSQLite3Database<typeof schema>;
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -73,7 +71,7 @@ type EventListRow = {
   description: string;
   dateTime: string;
   endDateTime: string;
-  recurrenceType: RecurrenceRule["frequency"];
+  recurrenceType: string;
   recurrenceEndDate: string | null;
   locationId: string;
   locationName: string;
@@ -85,7 +83,7 @@ type EventListRow = {
   locationHowToFind: string | null;
   dateAdded: string;
   lastUpdated: string;
-  skillLevel: SkillLevel;
+  skillLevel: string;
   prerequisites: string | null;
   costAmount: number | null;
   costCurrency: string | null;
@@ -128,7 +126,7 @@ function groupEventRows(rows: EventListRow[]): EventSummary[] {
         teacherCount: 0,
         dateAdded: row.dateAdded,
         lastUpdated: row.lastUpdated,
-        skillLevel: row.skillLevel,
+        skillLevel: row.skillLevel as SkillLevel,
         prerequisites: row.prerequisites,
         costAmount: row.costAmount,
         costCurrency: row.costCurrency,
@@ -137,6 +135,11 @@ function groupEventRows(rows: EventListRow[]): EventSummary[] {
         isFull: false, // recomputed after attendeeCount is tallied
         isPast: false, // set by finalizeEventSummaries
         userRsvp: null, // populated by page.tsx after getUserRsvpMap
+        // Group/ticket fields — not populated in list queries for performance.
+        // Correctly populated in getEventDetail.
+        groupId: null,
+        groupName: null,
+        hasTicketTypes: false,
       });
     }
     if (row.rsvpRole !== null) {
@@ -151,9 +154,9 @@ function groupEventRows(rows: EventListRow[]): EventSummary[] {
   }
   return Array.from(map.values());
 }
-function recurrenceFromValues(type: RecurrenceRule["frequency"], endDate: string | null): RecurrenceRule | null {
+function recurrenceFromValues(type: string, endDate: string | null): RecurrenceRule | null {
   if (!type || type === "none") return null;
-  return { frequency: type, endDate };
+  return { frequency: type as RecurrenceRule["frequency"], endDate };
 }
 
 function attachNextOccurrence(summary: EventSummary, referenceIso: string): EventSummary {
@@ -338,6 +341,12 @@ export async function getEventDetail(
     isFull: eventRow.maxAttendees !== null && rsvpRows.length >= eventRow.maxAttendees,
     isPast: computeNextOccurrence(eventRow.dateTime, eventRow.endDateTime, recurrence) === null,
     userRsvp: null,
+    // Group/ticket fields — populated by the page after calling event-groups service
+    groupId: null,
+    groupName: null,
+    hasTicketTypes: false,
+    ticketTypes: [],
+    userBooking: null,
   };
 }
 
@@ -364,12 +373,13 @@ export async function deleteRsvp(
   userId: string,
   eventId: string
 ): Promise<boolean> {
-  const result = await db
+  const rows = await db
     .delete(schema.rsvps)
     .where(
       and(eq(schema.rsvps.eventId, eventId), eq(schema.rsvps.userId, userId))
-    );
-  return result.changes > 0;
+    )
+    .returning({ id: schema.rsvps.id });
+  return rows.length > 0;
 }
 
 export async function getEventById(

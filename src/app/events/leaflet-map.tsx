@@ -1,17 +1,33 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
+import { useEffect, useMemo, useRef } from "react";
+import { MapContainer, TileLayer, Marker, useMap, useMapEvent } from "react-leaflet";
 import L from "leaflet";
 import { BreadcrumbNav } from "./breadcrumbs";
 import { normalizeCityName } from "@/lib/city-utils";
+import { getContinent } from "@/lib/location-hierarchy";
 import { isEventFresh } from "@/lib/event-utils";
+import { DAY_HEX, getEventDay } from "@/lib/day-utils";
 import type { EventSummary } from "@/types";
+import type { DrillState } from "./events-content";
 
 import "leaflet/dist/leaflet.css";
 
-type Level = 1 | 2 | 3;
-const LEVEL_ZOOM: Record<Level, number> = { 1: 2, 2: 5, 3: 12 };
+// Level 1 = globe (continent markers)
+// Level 2 = continent (country markers for that continent)
+// Level 3 = country (city markers for that country)
+// Level 4 = city (event pills)
+type Level = 1 | 2 | 3 | 4;
+const LEVEL_ZOOM: Record<Level, number> = { 1: 2, 2: 4, 3: 6, 4: 12 };
+
+// Zoom thresholds: if user zooms below these, drill up one level
+const ZOOM_DOWN_THRESHOLD: Record<2 | 3 | 4, number> = { 2: 2.5, 3: 4.5, 4: 8 };
+
+interface ContinentEntry {
+  continent: string;
+  count: number;
+  center: [number, number];
+}
 
 interface CityEntry {
   city: string;
@@ -23,22 +39,33 @@ interface CityEntry {
 
 interface CountryEntry {
   country: string;
+  continent: string;
   count: number;
   center: [number, number];
 }
 
 interface Props {
   events: EventSummary[];
-  homeCity?: string | null;
+  allEvents: EventSummary[];
   userLastLogin: string | null;
+  drill: DrillState;
+  onDrill: (d: DrillState) => void;
 }
 
-export function LeafletMap({ events, homeCity, userLastLogin }: Props) {
-  const normalizedHomeCity = normalizeCityName(homeCity) ?? homeCity ?? null;
+export function LeafletMap({ events, allEvents, userLastLogin, drill, onDrill }: Props) {
+  // Derive level/activeContinent/activeCountry/activeCity from shared drill state
+  const level: Level =
+    drill.level === "globe" ? 1 :
+    drill.level === "continent" ? 2 :
+    drill.level === "country" ? 3 : 4;
 
-  const { cityEntries, countryEntries, cityMap, countryMap } = useMemo(() => {
+  const activeContinent = "continent" in drill ? drill.continent : null;
+  const activeCountry = "country" in drill ? drill.country : null;
+  const activeCity = "city" in drill ? drill.city : null;
+
+  const { cityEntries, countryEntries, continentEntries, cityMap, countryMap, continentMap } = useMemo(() => {
     const cityStats = new Map<string, { city: string; country: string; pts: { lat: number; lng: number }[]; count: number }>();
-    for (const event of events) {
+    for (const event of allEvents) {
       const canonicalCity = normalizeCityName(event.location.city) ?? event.location.city;
       const key = `${canonicalCity}||${event.location.country}`;
       if (!cityStats.has(key)) {
@@ -49,13 +76,22 @@ export function LeafletMap({ events, homeCity, userLastLogin }: Props) {
       entry.count++;
     }
 
-    const countryStats = new Map<string, { pts: { lat: number; lng: number }[]; count: number }>();
+    const countryStats = new Map<string, { continent: string; pts: { lat: number; lng: number }[]; count: number }>();
     for (const entry of cityStats.values()) {
       const country = entry.country;
-      const stats = countryStats.get(country) ?? { pts: [], count: 0 };
+      const continent = getContinent(country);
+      const stats = countryStats.get(country) ?? { continent, pts: [], count: 0 };
       stats.pts.push(...entry.pts);
       stats.count += entry.count;
       countryStats.set(country, stats);
+    }
+
+    const continentStats = new Map<string, { pts: { lat: number; lng: number }[]; count: number }>();
+    for (const [, stats] of countryStats.entries()) {
+      const cs = continentStats.get(stats.continent) ?? { pts: [], count: 0 };
+      cs.pts.push(...stats.pts);
+      cs.count += stats.count;
+      continentStats.set(stats.continent, cs);
     }
 
     const cities: CityEntry[] = [];
@@ -64,13 +100,7 @@ export function LeafletMap({ events, homeCity, userLastLogin }: Props) {
       if (entry.pts.length === 0) continue;
       const center = centroid(entry.pts);
       const bounds = buildBounds(entry.pts);
-      const record: CityEntry = {
-        city: entry.city,
-        country: entry.country,
-        count: entry.count,
-        center,
-        bounds,
-      };
+      const record: CityEntry = { city: entry.city, country: entry.country, count: entry.count, center, bounds };
       const mapKey = `${entry.city}||${entry.country}`;
       cities.push(record);
       cityLookup.set(mapKey, record);
@@ -81,16 +111,34 @@ export function LeafletMap({ events, homeCity, userLastLogin }: Props) {
     for (const [country, stats] of countryStats.entries()) {
       if (stats.pts.length === 0) continue;
       const center = centroid(stats.pts);
-      const record: CountryEntry = { country, count: stats.count, center };
+      const record: CountryEntry = { country, continent: stats.continent, count: stats.count, center };
       countries.push(record);
       countryLookup.set(country, record);
     }
 
+    const continentsArr: ContinentEntry[] = [];
+    const continentLookup = new Map<string, ContinentEntry>();
+    for (const [continent, stats] of continentStats.entries()) {
+      if (stats.pts.length === 0) continue;
+      const center = centroid(stats.pts);
+      const record: ContinentEntry = { continent, count: stats.count, center };
+      continentsArr.push(record);
+      continentLookup.set(continent, record);
+    }
+
     cities.sort((a, b) => a.city.localeCompare(b.city));
     countries.sort((a, b) => a.country.localeCompare(b.country));
+    continentsArr.sort((a, b) => a.continent.localeCompare(b.continent));
 
-    return { cityEntries: cities, countryEntries: countries, cityMap: cityLookup, countryMap: countryLookup };
-  }, [events]);
+    return {
+      cityEntries: cities,
+      countryEntries: countries,
+      continentEntries: continentsArr,
+      cityMap: cityLookup,
+      countryMap: countryLookup,
+      continentMap: continentLookup,
+    };
+  }, [allEvents]);
 
   const globalCenter = useMemo(() => {
     if (events.length === 0) return [20, 0] as [number, number];
@@ -98,21 +146,23 @@ export function LeafletMap({ events, homeCity, userLastLogin }: Props) {
     return centroid(pts);
   }, [events]);
 
-  const initialCity = normalizedHomeCity ? cityEntries.find((c) => c.city === normalizedHomeCity) : undefined;
-  const [level, setLevel] = useState<Level>(initialCity ? 3 : 1);
-  const [activeCountry, setActiveCountry] = useState<string | null>(initialCity?.country ?? null);
-  const [activeCity, setActiveCity] = useState<string | null>(initialCity?.city ?? null);
-
   const freshEventIds = useMemo(
     () => new Set(events.filter((event) => isEventFresh(event, userLastLogin)).map((event) => event.id)),
     [events, userLastLogin],
   );
 
-  // Countries/cities that contain at least one fresh event (for blue bubble tint)
   const freshCountries = useMemo(() => {
     const set = new Set<string>();
     for (const event of events) {
       if (freshEventIds.has(event.id)) set.add(event.location.country);
+    }
+    return set;
+  }, [events, freshEventIds]);
+
+  const freshContinents = useMemo(() => {
+    const set = new Set<string>();
+    for (const event of events) {
+      if (freshEventIds.has(event.id)) set.add(getContinent(event.location.country));
     }
     return set;
   }, [events, freshEventIds]);
@@ -129,61 +179,62 @@ export function LeafletMap({ events, homeCity, userLastLogin }: Props) {
   }, [events, freshEventIds]);
 
   const currentCenter = useMemo<[number, number]>(() => {
-    if (level === 3 && activeCity && activeCountry) {
+    if (level === 4 && activeCity && activeCountry) {
       return cityMap.get(`${activeCity}||${activeCountry}`)?.center ?? globalCenter;
     }
-    if (level === 2 && activeCountry) {
+    if (level === 3 && activeCountry) {
       return countryMap.get(activeCountry)?.center ?? globalCenter;
     }
+    if (level === 2 && activeContinent) {
+      return continentMap.get(activeContinent)?.center ?? globalCenter;
+    }
     return globalCenter;
-  }, [level, activeCity, activeCountry, cityMap, countryMap, globalCenter]);
+  }, [level, activeCity, activeCountry, activeContinent, cityMap, countryMap, continentMap, globalCenter]);
 
   const currentBounds = useMemo<[[number, number], [number, number]] | null>(() => {
-    if (level === 3 && activeCity && activeCountry) {
+    if (level === 4 && activeCity && activeCountry) {
       return cityMap.get(`${activeCity}||${activeCountry}`)?.bounds ?? null;
     }
     return null;
   }, [level, activeCity, activeCountry, cityMap]);
 
   const breadcrumbItems = useMemo(() => {
-    const items = [] as { label: string; action?: () => void }[];
-    items.push({ label: "Globe", action: level === 1 ? undefined : () => handleGlobe() });
+    const items: { label: string; count?: number; action?: () => void }[] = [];
+    items.push({
+      label: "Globe",
+      count: events.length,
+      action: level === 1 ? undefined : () => onDrill({ level: "globe" }),
+    });
+    if (activeContinent) {
+      const continentCount = continentMap.get(activeContinent)?.count;
+      items.push({
+        label: activeContinent,
+        count: continentCount,
+        action: level === 2 ? undefined : () => onDrill({ level: "continent", continent: activeContinent }),
+      });
+    }
     if (activeCountry) {
+      const countryCount = countryMap.get(activeCountry)?.count;
       items.push({
         label: activeCountry,
-        action: level === 2 ? undefined : () => handleCountry(activeCountry),
+        count: countryCount,
+        action: level === 3 ? undefined : () => onDrill({ level: "country", country: activeCountry }),
       });
     }
     if (activeCity && activeCountry) {
+      const cityCount = cityMap.get(`${activeCity}||${activeCountry}`)?.count;
       items.push({
         label: activeCity,
-        action: level === 3 ? undefined : () => handleCity(activeCountry, activeCity),
+        count: cityCount,
+        action: level === 4 ? undefined : () => onDrill({ level: "city", country: activeCountry, city: activeCity }),
       });
     }
     return items;
-  }, [level, activeCountry, activeCity]);
+  }, [level, activeContinent, activeCountry, activeCity, events.length, continentMap, countryMap, cityMap, onDrill]);
 
-  function handleGlobe() {
-    setLevel(1);
-    setActiveCountry(null);
-    setActiveCity(null);
-  }
-
-  function handleCountry(country: string) {
-    setLevel(2);
-    setActiveCountry(country);
-    setActiveCity(null);
-  }
-
-  function handleCity(country: string, city: string) {
-    setLevel(3);
-    setActiveCountry(country);
-    setActiveCity(city);
-  }
-
-  if (events.length === 0) {
-    return <p className="mt-6 text-gray-500">No events to show yet.</p>;
-  }
+  const countriesForActiveContinent = activeContinent
+    ? countryEntries.filter((c) => c.continent === activeContinent)
+    : countryEntries;
 
   const citiesForActiveCountry = activeCountry
     ? cityEntries.filter((city) => city.country === activeCountry)
@@ -195,6 +246,10 @@ export function LeafletMap({ events, homeCity, userLastLogin }: Props) {
     return canonical === activeCity && event.location.country === activeCountry;
   });
 
+  if (events.length === 0) {
+    return <p className="mt-6 text-gray-500">No events to show yet.</p>;
+  }
+
   return (
     <div className="mt-6 space-y-3">
       <BreadcrumbNav items={breadcrumbItems} />
@@ -202,6 +257,7 @@ export function LeafletMap({ events, homeCity, userLastLogin }: Props) {
         <MapContainer
           center={currentCenter}
           zoom={LEVEL_ZOOM[level]}
+          minZoom={1}
           style={{ height: "100%", width: "100%" }}
           scrollWheelZoom
           doubleClickZoom
@@ -210,6 +266,7 @@ export function LeafletMap({ events, homeCity, userLastLogin }: Props) {
           zoomControl={false}
         >
           <MapController center={currentCenter} zoom={LEVEL_ZOOM[level]} bounds={currentBounds} />
+          <ZoomWatcher level={level} drill={drill} onDrill={onDrill} countryMap={countryMap} />
           <TileLayer
             attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
@@ -217,29 +274,38 @@ export function LeafletMap({ events, homeCity, userLastLogin }: Props) {
             maxZoom={19}
           />
           {level === 1 &&
-            countryEntries.map((country) => (
+            continentEntries.map((cont) => (
+              <Marker
+                key={cont.continent}
+                position={cont.center}
+                icon={countIcon(cont.count, freshContinents.has(cont.continent) ? "#3b82f6" : "#7c3aed", `${cont.continent}: ${cont.count} event${cont.count !== 1 ? "s" : ""}`, 64)}
+                eventHandlers={{ click: () => onDrill({ level: "continent", continent: cont.continent }) }}
+              />
+            ))}
+          {level === 2 &&
+            countriesForActiveContinent.map((country) => (
               <Marker
                 key={country.country}
                 position={country.center}
                 icon={countIcon(country.count, freshCountries.has(country.country) ? "#3b82f6" : "#6366f1", `${country.country}: ${country.count} event${country.count !== 1 ? "s" : ""}`)}
-                eventHandlers={{ click: () => handleCountry(country.country) }}
+                eventHandlers={{ click: () => onDrill({ level: "country", country: country.country }) }}
               />
             ))}
-          {level === 2 &&
+          {level === 3 &&
             citiesForActiveCountry.map((city) => (
               <Marker
                 key={`${city.city}-${city.country}`}
                 position={city.center}
                 icon={countIcon(city.count, freshCities.has(`${city.city}||${city.country}`) ? "#3b82f6" : "#0ea5e9", `${city.city}: ${city.count} event${city.count !== 1 ? "s" : ""}`)}
-                eventHandlers={{ click: () => handleCity(city.country, city.city) }}
+                eventHandlers={{ click: () => onDrill({ level: "city", country: city.country, city: city.city }) }}
               />
             ))}
-          {level === 3 &&
+          {level === 4 &&
             cityEvents.map((event) => (
               <Marker
                 key={event.id}
                 position={[event.location.latitude, event.location.longitude]}
-                icon={eventPillIcon(event, userLastLogin)}
+                icon={eventPillIcon(event)}
                 eventHandlers={{ click: () => (window.location.href = `/events/${event.id}?from=map`) }}
               />
             ))}
@@ -248,6 +314,44 @@ export function LeafletMap({ events, homeCity, userLastLogin }: Props) {
     </div>
   );
 }
+
+// ── Zoom snapping: when user zooms out past threshold, drill up ───────────────
+
+interface ZoomWatcherProps {
+  level: Level;
+  drill: DrillState;
+  onDrill: (d: DrillState) => void;
+  countryMap: Map<string, { continent: string }>;
+}
+
+function ZoomWatcher({ level, drill, onDrill, countryMap }: ZoomWatcherProps) {
+  // Keep a ref so the handler can see current props without re-registering
+  const ref = useRef({ level, drill, onDrill, countryMap });
+  useEffect(() => { ref.current = { level, drill, onDrill, countryMap }; });
+
+  useMapEvent("zoomend", (e) => {
+    const zoom = e.target.getZoom() as number;
+    const { level: lv, drill: d, onDrill: od, countryMap: cm } = ref.current;
+
+    if (lv === 4 && zoom < ZOOM_DOWN_THRESHOLD[4]) {
+      // city → country
+      if ("country" in d) od({ level: "country", country: d.country });
+    } else if (lv === 3 && zoom < ZOOM_DOWN_THRESHOLD[3]) {
+      // country → continent
+      const country = "country" in d ? d.country : null;
+      const continent = country ? (cm.get(country)?.continent ?? null) : null;
+      if (continent) od({ level: "continent", continent });
+      else od({ level: "globe" });
+    } else if (lv === 2 && zoom < ZOOM_DOWN_THRESHOLD[2]) {
+      // continent → globe
+      od({ level: "globe" });
+    }
+  });
+
+  return null;
+}
+
+// ── MapController: fly/fit when drill changes ────────────────────────────────
 
 function MapController({ center, bounds, zoom }: { center: [number, number]; bounds: [[number, number], [number, number]] | null; zoom: number }) {
   const map = useMap();
@@ -272,6 +376,8 @@ function MapController({ center, bounds, zoom }: { center: [number, number]; bou
 
   return null;
 }
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function centroid(pts: { lat: number; lng: number }[]): [number, number] {
   if (pts.length === 0) return [20, 0];
@@ -306,14 +412,8 @@ function countIcon(count: number, color: string, title?: string, size = 58) {
   });
 }
 
-function eventPillIcon(event: EventSummary, lastLogin: string | null) {
-  let color: string;
-  if (event.isPast) color = "#f97316";
-  else if (event.isFull) color = "#dc2626";
-  else if (isEventFresh(event, lastLogin)) color = "#3b82f6";
-  else if (event.userRsvp && (event.costAmount ?? 0) > 0 && !event.userRsvp.paymentStatus) color = "#ca8a04";
-  else if (event.userRsvp) color = "#059669";
-  else color = "#059669";
+function eventPillIcon(event: EventSummary) {
+  const color = DAY_HEX[getEventDay(event)];
   const label = event.title.length > 24 ? `${event.title.slice(0, 23)}…` : event.title;
   return L.divIcon({
     html: `<div title="${escapeAttr(event.title)}" style="background:${color};color:#fff;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);cursor:pointer;box-sizing:border-box;">${label}</div>`,

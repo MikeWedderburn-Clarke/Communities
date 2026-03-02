@@ -5,9 +5,18 @@ function toTimestamp(value: string): number {
   return Number.isNaN(ts) ? 0 : ts;
 }
 
-export function isEventFresh(event: Pick<EventSummary, "dateAdded" | "lastUpdated">, since: string | null): boolean {
+export function isEventNew(event: Pick<EventSummary, "dateAdded">, since: string | null): boolean {
   if (!since) return false;
   const sinceTs = toTimestamp(since);
-  if (sinceTs === 0) return false;
-  return toTimestamp(event.dateAdded) > sinceTs || toTimestamp(event.lastUpdated) > sinceTs;
+  return sinceTs > 0 && toTimestamp(event.dateAdded) > sinceTs;
+}
+
+export function isEventUpdated(event: Pick<EventSummary, "dateAdded" | "lastUpdated">, since: string | null): boolean {
+  if (!since) return false;
+  const sinceTs = toTimestamp(since);
+  return sinceTs > 0 && toTimestamp(event.lastUpdated) > sinceTs && toTimestamp(event.dateAdded) <= sinceTs;
+}
+
+export function isEventFresh(event: Pick<EventSummary, "dateAdded" | "lastUpdated">, since: string | null): boolean {
+  return isEventNew(event, since) || isEventUpdated(event, since);
 }

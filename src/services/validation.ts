@@ -1,4 +1,4 @@
-import { ROLES, RECURRENCE_FREQUENCIES, SKILL_LEVELS, type Role, type SkillLevel, type CreateEventInput, type CreateLocationInput, type RecurrenceRule } from "@/types";
+import { ROLES, RECURRENCE_FREQUENCIES, SKILL_LEVELS, BOOKING_PAYMENT_STATUSES, EVENT_GROUP_TYPES, type Role, type SkillLevel, type CreateEventInput, type CreateLocationInput, type RecurrenceRule, type CreateEventGroupInput, type CreateTicketTypeInput, type CreateBookingInput, type SetTeacherSplitInput, type UpdateBookingStatusInput, type BookingPaymentStatus, type EventGroupType } from "@/types";
 
 export interface ValidationError {
   field: string;
@@ -307,6 +307,274 @@ export function validateLocationInput(body: unknown): {
       longitude: obj.longitude as number,
       what3names,
       howToFind,
+    },
+  };
+}
+
+// ── Event Group Validators ─────────────────────────────────────────
+
+export function validateCreateEventGroupInput(body: unknown): {
+  valid: true;
+  data: CreateEventGroupInput;
+} | {
+  valid: false;
+  errors: ValidationError[];
+} {
+  const errors: ValidationError[] = [];
+
+  if (typeof body !== "object" || body === null) {
+    return { valid: false, errors: [{ field: "body", message: "Request body must be a JSON object" }] };
+  }
+
+  const obj = body as Record<string, unknown>;
+
+  if (typeof obj.name !== "string" || obj.name.trim() === "") {
+    errors.push({ field: "name", message: "name is required and must be a non-empty string" });
+  } else if (obj.name.trim().length > 200) {
+    errors.push({ field: "name", message: "name must be 200 characters or less" });
+  }
+
+  if (obj.description !== undefined && obj.description !== null && obj.description !== "") {
+    if (typeof obj.description !== "string") {
+      errors.push({ field: "description", message: "description must be a string" });
+    } else if (obj.description.trim().length > 2000) {
+      errors.push({ field: "description", message: "description must be 2000 characters or less" });
+    }
+  }
+
+  if (typeof obj.type !== "string" || !(EVENT_GROUP_TYPES as readonly string[]).includes(obj.type)) {
+    errors.push({ field: "type", message: `type must be one of: ${EVENT_GROUP_TYPES.join(", ")}` });
+  }
+
+  if (errors.length > 0) return { valid: false, errors };
+
+  return {
+    valid: true,
+    data: {
+      name: (obj.name as string).trim(),
+      description: typeof obj.description === "string" ? obj.description.trim() || null : null,
+      type: obj.type as EventGroupType,
+    },
+  };
+}
+
+// ── Ticket Type Validators ─────────────────────────────────────────
+
+export function validateCreateTicketTypeInput(body: unknown): {
+  valid: true;
+  data: CreateTicketTypeInput;
+} | {
+  valid: false;
+  errors: ValidationError[];
+} {
+  const errors: ValidationError[] = [];
+
+  if (typeof body !== "object" || body === null) {
+    return { valid: false, errors: [{ field: "body", message: "Request body must be a JSON object" }] };
+  }
+
+  const obj = body as Record<string, unknown>;
+
+  if (typeof obj.groupId !== "string" || obj.groupId.trim() === "") {
+    errors.push({ field: "groupId", message: "groupId is required" });
+  }
+
+  if (typeof obj.name !== "string" || obj.name.trim() === "") {
+    errors.push({ field: "name", message: "name is required and must be a non-empty string" });
+  } else if (obj.name.trim().length > 200) {
+    errors.push({ field: "name", message: "name must be 200 characters or less" });
+  }
+
+  let costAmount = 0;
+  if (typeof obj.costAmount !== "number" || obj.costAmount < 0) {
+    errors.push({ field: "costAmount", message: "costAmount must be a non-negative number" });
+  } else {
+    costAmount = obj.costAmount;
+  }
+
+  if (typeof obj.costCurrency !== "string" || obj.costCurrency.trim() === "") {
+    errors.push({ field: "costCurrency", message: "costCurrency is required" });
+  }
+
+  if (obj.concessionAmount !== undefined && obj.concessionAmount !== null) {
+    if (typeof obj.concessionAmount !== "number" || obj.concessionAmount < 0) {
+      errors.push({ field: "concessionAmount", message: "concessionAmount must be a non-negative number" });
+    }
+  }
+
+  if (obj.capacity !== undefined && obj.capacity !== null) {
+    if (typeof obj.capacity !== "number" || !Number.isInteger(obj.capacity) || obj.capacity < 1) {
+      errors.push({ field: "capacity", message: "capacity must be a positive integer" });
+    }
+  }
+
+  if (!Array.isArray(obj.coveredEventIds) || obj.coveredEventIds.length === 0) {
+    errors.push({ field: "coveredEventIds", message: "coveredEventIds must be a non-empty array of event IDs" });
+  } else if (obj.coveredEventIds.some((id) => typeof id !== "string" || id.trim() === "")) {
+    errors.push({ field: "coveredEventIds", message: "each coveredEventId must be a non-empty string" });
+  }
+
+  let sortOrder = 0;
+  if (obj.sortOrder !== undefined && obj.sortOrder !== null) {
+    if (typeof obj.sortOrder !== "number" || !Number.isInteger(obj.sortOrder)) {
+      errors.push({ field: "sortOrder", message: "sortOrder must be an integer" });
+    } else {
+      sortOrder = obj.sortOrder;
+    }
+  }
+
+  if (errors.length > 0) return { valid: false, errors };
+
+  return {
+    valid: true,
+    data: {
+      groupId: (obj.groupId as string).trim(),
+      name: (obj.name as string).trim(),
+      description: typeof obj.description === "string" ? obj.description.trim() || null : null,
+      costAmount,
+      costCurrency: (obj.costCurrency as string).trim().toUpperCase(),
+      concessionAmount: typeof obj.concessionAmount === "number" ? obj.concessionAmount : null,
+      capacity: typeof obj.capacity === "number" ? obj.capacity : null,
+      coveredEventIds: (obj.coveredEventIds as string[]).map((id) => id.trim()),
+      sortOrder,
+    },
+  };
+}
+
+// ── Booking Validators ─────────────────────────────────────────────
+
+export function validateCreateBookingInput(body: unknown): {
+  valid: true;
+  data: CreateBookingInput;
+} | {
+  valid: false;
+  errors: ValidationError[];
+} {
+  const errors: ValidationError[] = [];
+
+  if (typeof body !== "object" || body === null) {
+    return { valid: false, errors: [{ field: "body", message: "Request body must be a JSON object" }] };
+  }
+
+  const obj = body as Record<string, unknown>;
+
+  if (typeof obj.ticketTypeId !== "string" || obj.ticketTypeId.trim() === "") {
+    errors.push({ field: "ticketTypeId", message: "ticketTypeId is required" });
+  }
+
+  // role is optional (null allowed)
+  if (obj.role !== undefined && obj.role !== null) {
+    if (typeof obj.role !== "string" || !(ROLES as readonly string[]).includes(obj.role)) {
+      errors.push({ field: "role", message: `role must be one of: ${ROLES.join(", ")} or null` });
+    }
+  }
+
+  if (typeof obj.showName !== "boolean") {
+    errors.push({ field: "showName", message: "showName must be a boolean" });
+  }
+
+  if (obj.isTeaching !== undefined && typeof obj.isTeaching !== "boolean") {
+    errors.push({ field: "isTeaching", message: "isTeaching must be a boolean" });
+  }
+
+  if (errors.length > 0) return { valid: false, errors };
+
+  return {
+    valid: true,
+    data: {
+      ticketTypeId: (obj.ticketTypeId as string).trim(),
+      role: (obj.role as Role | null) ?? null,
+      showName: obj.showName as boolean,
+      isTeaching: (obj.isTeaching as boolean) ?? false,
+    },
+  };
+}
+
+export function validateUpdateBookingStatusInput(body: unknown): {
+  valid: true;
+  data: UpdateBookingStatusInput;
+} | {
+  valid: false;
+  errors: ValidationError[];
+} {
+  const errors: ValidationError[] = [];
+
+  if (typeof body !== "object" || body === null) {
+    return { valid: false, errors: [{ field: "body", message: "Request body must be a JSON object" }] };
+  }
+
+  const obj = body as Record<string, unknown>;
+
+  if (
+    typeof obj.paymentStatus !== "string" ||
+    !(BOOKING_PAYMENT_STATUSES as readonly string[]).includes(obj.paymentStatus)
+  ) {
+    errors.push({
+      field: "paymentStatus",
+      message: `paymentStatus must be one of: ${BOOKING_PAYMENT_STATUSES.join(", ")}`,
+    });
+  }
+
+  if (obj.amountPaid !== undefined && obj.amountPaid !== null) {
+    if (typeof obj.amountPaid !== "number" || obj.amountPaid < 0) {
+      errors.push({ field: "amountPaid", message: "amountPaid must be a non-negative number" });
+    }
+  }
+
+  if (errors.length > 0) return { valid: false, errors };
+
+  return {
+    valid: true,
+    data: {
+      paymentStatus: obj.paymentStatus as BookingPaymentStatus,
+      amountPaid: typeof obj.amountPaid === "number" ? obj.amountPaid : null,
+      notes: typeof obj.notes === "string" ? obj.notes.trim() || null : null,
+    },
+  };
+}
+
+// ── Teacher Split Validators ───────────────────────────────────────
+
+export function validateSetTeacherSplitInput(body: unknown): {
+  valid: true;
+  data: SetTeacherSplitInput;
+} | {
+  valid: false;
+  errors: ValidationError[];
+} {
+  const errors: ValidationError[] = [];
+
+  if (typeof body !== "object" || body === null) {
+    return { valid: false, errors: [{ field: "body", message: "Request body must be a JSON object" }] };
+  }
+
+  const obj = body as Record<string, unknown>;
+
+  if (typeof obj.ticketTypeId !== "string" || obj.ticketTypeId.trim() === "") {
+    errors.push({ field: "ticketTypeId", message: "ticketTypeId is required" });
+  }
+
+  if (typeof obj.teacherUserId !== "string" || obj.teacherUserId.trim() === "") {
+    errors.push({ field: "teacherUserId", message: "teacherUserId is required" });
+  }
+
+  if (typeof obj.fixedAmount !== "number" || obj.fixedAmount < 0) {
+    errors.push({ field: "fixedAmount", message: "fixedAmount must be a non-negative number" });
+  }
+
+  if (typeof obj.currency !== "string" || obj.currency.trim() === "") {
+    errors.push({ field: "currency", message: "currency is required" });
+  }
+
+  if (errors.length > 0) return { valid: false, errors };
+
+  return {
+    valid: true,
+    data: {
+      ticketTypeId: (obj.ticketTypeId as string).trim(),
+      teacherUserId: (obj.teacherUserId as string).trim(),
+      fixedAmount: obj.fixedAmount as number,
+      currency: (obj.currency as string).trim().toUpperCase(),
     },
   };
 }

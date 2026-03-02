@@ -1,7 +1,5 @@
-import { redirect } from "next/navigation";
-import { getMockUsers, setSessionCookie } from "@/lib/auth";
-import { recordLastLogin } from "@/services/users";
-import { db } from "@/db";
+import { signIn } from "@/auth";
+import { getMockUsers } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -12,43 +10,70 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   const redirectTo = params.redirect ?? "/events";
-  const mockUsers = await getMockUsers();
 
-  async function loginAction(formData: FormData) {
-    "use server";
-    const userId = formData.get("userId") as string;
-    if (!userId) return;
-    await setSessionCookie(userId);
-    await recordLastLogin(db, userId);
-    redirect(redirectTo);
-  }
+  const isMock = process.env.MOCK_AUTH === "true";
+  const hasEntra = Boolean(process.env.AUTH_ENTRA_CLIENT_ID);
+
+  const mockUsers = isMock ? await getMockUsers() : [];
 
   return (
     <main className="mx-auto max-w-md px-4 py-16">
       <h1 className="text-2xl font-bold">Log In</h1>
-      <p className="mt-2 text-sm text-gray-500">
-        Mock auth — pick a test user. TODO: replace with real auth.
-      </p>
-      <form action={loginAction} className="mt-6 space-y-3">
-        <input type="hidden" name="redirect" value={redirectTo} />
-        {mockUsers.map((user) => (
+
+      {isMock && (
+        <>
+          <p className="mt-2 text-sm text-gray-500">
+            Development mode — pick a mock user.
+          </p>
+          <div className="mt-6 space-y-3">
+            {mockUsers.map((user) => (
+              <form
+                key={user.id}
+                action={async () => {
+                  "use server";
+                  await signIn("mock", { userId: user.id, redirectTo });
+                }}
+              >
+                <button
+                  type="submit"
+                  className="block w-full rounded-lg border border-gray-200 px-4 py-3 text-left hover:border-indigo-400 hover:bg-indigo-50"
+                >
+                  <span className="font-medium">{user.name}</span>
+                  {user.isAdmin && (
+                    <span className="ml-1.5 inline-flex items-center rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">
+                      admin
+                    </span>
+                  )}
+                  <span className="ml-2 text-sm text-gray-500">{user.email}</span>
+                </button>
+              </form>
+            ))}
+          </div>
+        </>
+      )}
+
+      {hasEntra && (
+        <form
+          className="mt-6"
+          action={async () => {
+            "use server";
+            await signIn("microsoft-entra-id", { redirectTo });
+          }}
+        >
           <button
-            key={user.id}
             type="submit"
-            name="userId"
-            value={user.id}
-            className="block w-full rounded-lg border border-gray-200 px-4 py-3 text-left hover:border-indigo-400 hover:bg-indigo-50"
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 px-4 py-3 hover:border-indigo-400 hover:bg-indigo-50"
           >
-            <span className="font-medium">{user.name}</span>
-            {user.isAdmin && (
-              <span className="ml-1.5 inline-flex items-center rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">
-                admin
-              </span>
-            )}
-            <span className="ml-2 text-sm text-gray-500">{user.email}</span>
+            Sign in with Microsoft
           </button>
-        ))}
-      </form>
+        </form>
+      )}
+
+      {!isMock && !hasEntra && (
+        <p className="mt-4 text-sm text-red-600">
+          No authentication provider is configured.
+        </p>
+      )}
     </main>
   );
 }

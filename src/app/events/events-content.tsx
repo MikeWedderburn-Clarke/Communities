@@ -20,6 +20,7 @@ type View = "list" | "map" | "combined";
 
 export type DrillState =
   | { level: "globe" }
+  | { level: "continent"; continent: string }
   | { level: "country"; country: string }
   | { level: "city"; country: string; city: string }
   | { level: "venue"; country: string; city: string; venue: string };
@@ -43,9 +44,11 @@ function computeInitialDrill(events: EventSummary[], homeCity: string | null): D
   if (!homeCity) return { level: "globe" };
   const normalized = normalizeCityName(homeCity) ?? homeCity;
   const hierarchy = buildLocationHierarchy(events);
-  for (const country of hierarchy) {
-    const city = country.cities.find((c) => c.city === normalized);
-    if (city) return { level: "city", country: country.country, city: city.city };
+  for (const continentGroup of hierarchy) {
+    for (const country of continentGroup.countries) {
+      const city = country.cities.find((c) => c.city === normalized);
+      if (city) return { level: "city", country: country.country, city: city.city };
+    }
   }
   return { level: "globe" };
 }

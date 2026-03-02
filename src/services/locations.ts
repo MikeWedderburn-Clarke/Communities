@@ -1,9 +1,7 @@
 import { eq, and, like, or } from "drizzle-orm";
-import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import type { Db } from "@/db";
 import * as schema from "@/db/schema";
 import type { Location, CreateLocationInput } from "@/types";
-
-type Db = BetterSQLite3Database<typeof schema>;
 
 export async function getLocationById(db: Db, id: string): Promise<Location | null> {
   const [row] = await db

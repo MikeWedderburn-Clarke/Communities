@@ -1,0 +1,13 @@
+.git
+.gitignore
+.github
+.next
+.env*.local
+node_modules
+Dockerfile*
+*.md
+drizzle
+community.db
+coverage
+.vscode
+.copilot

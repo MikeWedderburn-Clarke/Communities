@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 import { normalizeCityName } from "@/lib/city-utils";
 import { DAY_HEX, getEventDay } from "@/lib/day-utils";
-import { buildLocationHierarchy } from "@/lib/location-hierarchy";
+import { buildLocationHierarchy, getContinent } from "@/lib/location-hierarchy";
 import { isEventNew, isEventUpdated } from "@/lib/event-utils";
 import { RoleBadges } from "@/components/role-badges";
 import type { EventSummary } from "@/types";
@@ -33,23 +33,28 @@ interface Props {
 function computeInitialExpansion(
   events: EventSummary[],
   homeCity: string | null,
-): { country: string | null; city: string | null } {
-  if (!homeCity) return { country: null, city: null };
+): { continent: string | null; country: string | null; city: string | null } {
+  if (!homeCity) return { continent: null, country: null, city: null };
   const normalized = normalizeCityName(homeCity) ?? homeCity;
   const hierarchy = buildLocationHierarchy(events);
-  for (const c of hierarchy) {
-    const city = c.cities.find((ci) => ci.city === normalized);
-    if (city) return { country: c.country, city: city.city };
+  for (const continentGroup of hierarchy) {
+    for (const co of continentGroup.countries) {
+      const city = co.cities.find((ci) => ci.city === normalized);
+      if (city) return { continent: continentGroup.continent, country: co.country, city: city.city };
+    }
   }
-  return { country: null, city: null };
+  return { continent: null, country: null, city: null };
 }
 
-// Chevron icon (points right; rotates 90° when expanded)
-function Chevron({ expanded, size = "md" }: { expanded: boolean; size?: "sm" | "md" }) {
-  const dim = size === "sm" ? "h-3 w-3" : "h-3.5 w-3.5";
+// ── Shared tree UI primitives ─────────────────────────────────────────────────
+
+// All rows in the tree use the same Chevron component and the same text-sm font.
+// Indentation: +pl-4 per depth level (l0=pl-2, l1=pl-6, l2=pl-10, events=pl-14).
+
+function Chevron({ expanded }: { expanded: boolean }) {
   return (
     <svg
-      className={`${dim} flex-shrink-0 text-gray-400 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
+      className={`h-3 w-3 flex-shrink-0 text-gray-400 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
       fill="currentColor"
       viewBox="0 0 20 20"
     >
@@ -70,13 +75,17 @@ function CountBadge({ n }: { n: number }) {
   );
 }
 
+function FreshDot() {
+  return <span className="h-2 w-2 flex-shrink-0 rounded-full bg-blue-500" />;
+}
+
 function StatusBadge({ cls, children }: { cls: string; children: ReactNode }) {
   return (
     <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${cls}`}>{children}</span>
   );
 }
 
-// ── Compact event row displayed inside an expanded city ───────────────
+// ── Compact event row ─────────────────────────────────────────────────────────
 
 interface EventRowProps {
   event: EventSummary;
@@ -99,7 +108,7 @@ function EventRow({ event, lastLogin }: EventRowProps) {
 
   return (
     <div
-      className="pl-10 pr-3 py-3 bg-white hover:bg-gray-50 transition-colors"
+      className="pl-14 pr-3 py-3 bg-white hover:bg-gray-50 transition-colors"
       style={{ borderLeft: `3px solid ${borderColor}` }}
     >
       {/* Title + status badges */}
@@ -144,7 +153,7 @@ function EventRow({ event, lastLogin }: EventRowProps) {
   );
 }
 
-// ── Main combined view ────────────────────────────────────────────────
+// ── Main combined view ────────────────────────────────────────────────────────
 
 export function EventsCombined({ events, allEvents, lastLogin, homeCity }: Props) {
   const hierarchy = useMemo(() => buildLocationHierarchy(events), [events]);
@@ -153,6 +162,7 @@ export function EventsCombined({ events, allEvents, lastLogin, homeCity }: Props
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const initial = useMemo(() => computeInitialExpansion(events, homeCity), []);
 
+  const [expandedContinent, setExpandedContinent] = useState<string | null>(initial.continent);
   const [expandedCountry, setExpandedCountry] = useState<string | null>(initial.country);
   const [expandedCity, setExpandedCity] = useState<string | null>(initial.city);
 
@@ -164,22 +174,43 @@ export function EventsCombined({ events, allEvents, lastLogin, homeCity }: Props
     if (expandedCountry) {
       return { level: "country", country: expandedCountry };
     }
+    if (expandedContinent) {
+      return { level: "continent", continent: expandedContinent };
+    }
     return { level: "globe" };
-  }, [expandedCountry, expandedCity]);
+  }, [expandedContinent, expandedCountry, expandedCity]);
 
-  // Two-way sync: map marker click updates tree expansion
+  // Two-way sync: map marker/zoom click updates tree expansion
   function onMapDrill(d: DrillState) {
     if (d.level === "globe") {
+      setExpandedContinent(null);
+      setExpandedCountry(null);
+      setExpandedCity(null);
+    } else if (d.level === "continent") {
+      setExpandedContinent(d.continent);
       setExpandedCountry(null);
       setExpandedCity(null);
     } else if (d.level === "country") {
+      setExpandedContinent(getContinent(d.country));
       setExpandedCountry(d.country);
       setExpandedCity(null);
     } else if (d.level === "city") {
+      setExpandedContinent(getContinent(d.country));
       setExpandedCountry(d.country);
       setExpandedCity(d.city);
     }
-    // "venue" level is not used in combined view
+  }
+
+  function toggleContinent(continent: string) {
+    if (expandedContinent === continent) {
+      setExpandedContinent(null);
+      setExpandedCountry(null);
+      setExpandedCity(null);
+    } else {
+      setExpandedContinent(continent);
+      setExpandedCountry(null);
+      setExpandedCity(null);
+    }
   }
 
   function toggleCountry(country: string) {
@@ -196,6 +227,9 @@ export function EventsCombined({ events, allEvents, lastLogin, homeCity }: Props
     setExpandedCity((prev) => (prev === city ? null : city));
   }
 
+  // Shared row class for each depth level — same font, same text size, only indent changes
+  const rowBase = "flex w-full items-center gap-2 pr-3 py-2 text-left text-sm font-medium text-gray-700 transition-colors";
+
   return (
     <div className="mt-6 flex min-h-[500px] h-[calc(100vh-280px)] overflow-hidden rounded-lg border border-gray-200 shadow-sm">
 
@@ -205,80 +239,97 @@ export function EventsCombined({ events, allEvents, lastLogin, homeCity }: Props
           <p className="p-4 text-sm text-gray-400">No events match the current filters.</p>
         ) : (
           <div className="divide-y divide-gray-100">
-            {hierarchy.map((countryGroup) => {
-              const isCountryOpen = expandedCountry === countryGroup.country;
-              const countryFresh = countryGroup.cities.some((c) =>
-                c.venues.some((v) =>
-                  v.events.some((e) => isEventNew(e, lastLogin) || isEventUpdated(e, lastLogin)),
+            {hierarchy.map((continentGroup) => {
+              const isContinentOpen = expandedContinent === continentGroup.continent;
+              const continentFresh = continentGroup.countries.some((co) =>
+                co.cities.some((ci) =>
+                  ci.venues.some((v) =>
+                    v.events.some((e) => isEventNew(e, lastLogin) || isEventUpdated(e, lastLogin)),
+                  ),
                 ),
               );
 
               return (
-                <div key={countryGroup.country}>
+                <div key={continentGroup.continent}>
 
-                  {/* Country row */}
+                  {/* Continent row — depth 0, pl-2 */}
                   <button
                     type="button"
-                    onClick={() => toggleCountry(countryGroup.country)}
-                    className={`flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors ${
-                      isCountryOpen
-                        ? "bg-indigo-50 text-indigo-900"
-                        : "hover:bg-gray-50 text-gray-800"
-                    }`}
+                    onClick={() => toggleContinent(continentGroup.continent)}
+                    className={`${rowBase} pl-2 ${isContinentOpen ? "bg-violet-50 text-violet-900" : "hover:bg-gray-50"}`}
                   >
-                    <Chevron expanded={isCountryOpen} />
-                    <span className="flex-1 text-sm font-semibold truncate">
-                      {countryGroup.country}
-                    </span>
-                    {countryFresh && !isCountryOpen && (
-                      <span className="h-2 w-2 flex-shrink-0 rounded-full bg-blue-500" />
-                    )}
-                    <CountBadge n={countryGroup.eventCount} />
+                    <Chevron expanded={isContinentOpen} />
+                    <span className="flex-1 truncate">{continentGroup.continent}</span>
+                    {continentFresh && !isContinentOpen && <FreshDot />}
+                    <CountBadge n={continentGroup.eventCount} />
                   </button>
 
-                  {/* Cities */}
-                  {isCountryOpen && (
+                  {/* Countries */}
+                  {isContinentOpen && (
                     <div className="border-t border-gray-100">
-                      {countryGroup.cities.map((cityGroup) => {
-                        const isCityOpen = expandedCity === cityGroup.city;
-                        const cityEvents = cityGroup.venues.flatMap((v) => v.events);
-                        const cityFresh = cityEvents.some(
-                          (e) => isEventNew(e, lastLogin) || isEventUpdated(e, lastLogin),
+                      {continentGroup.countries.map((countryGroup) => {
+                        const isCountryOpen = expandedCountry === countryGroup.country;
+                        const countryFresh = countryGroup.cities.some((ci) =>
+                          ci.venues.some((v) =>
+                            v.events.some((e) => isEventNew(e, lastLogin) || isEventUpdated(e, lastLogin)),
+                          ),
                         );
 
                         return (
-                          <div key={cityGroup.city}>
+                          <div key={countryGroup.country}>
 
-                            {/* City row */}
+                            {/* Country row — depth 1, pl-6 */}
                             <button
                               type="button"
-                              onClick={() => toggleCity(cityGroup.city)}
-                              className={`flex w-full items-center gap-2 py-2 pl-7 pr-3 text-left transition-colors ${
-                                isCityOpen
-                                  ? "bg-cyan-50 text-cyan-900"
-                                  : "hover:bg-gray-50 text-gray-700"
-                              }`}
+                              onClick={() => toggleCountry(countryGroup.country)}
+                              className={`${rowBase} pl-6 ${isCountryOpen ? "bg-indigo-50 text-indigo-900" : "hover:bg-gray-50"}`}
                             >
-                              <Chevron expanded={isCityOpen} size="sm" />
-                              <span className="flex-1 text-sm font-medium truncate">
-                                {cityGroup.city}
-                              </span>
-                              {cityFresh && !isCityOpen && (
-                                <span className="h-2 w-2 flex-shrink-0 rounded-full bg-blue-500" />
-                              )}
-                              <CountBadge n={cityGroup.eventCount} />
+                              <Chevron expanded={isCountryOpen} />
+                              <span className="flex-1 truncate">{countryGroup.country}</span>
+                              {countryFresh && !isCountryOpen && <FreshDot />}
+                              <CountBadge n={countryGroup.eventCount} />
                             </button>
 
-                            {/* Events list (shown when city is expanded) */}
-                            {isCityOpen && (
-                              <div className="divide-y divide-gray-100 border-t border-gray-100">
-                                {cityEvents.map((event) => (
-                                  <EventRow
-                                    key={event.id}
-                                    event={event}
-                                    lastLogin={lastLogin}
-                                  />
-                                ))}
+                            {/* Cities */}
+                            {isCountryOpen && (
+                              <div className="border-t border-gray-100">
+                                {countryGroup.cities.map((cityGroup) => {
+                                  const isCityOpen = expandedCity === cityGroup.city;
+                                  const cityEvents = cityGroup.venues.flatMap((v) => v.events);
+                                  const cityFresh = cityEvents.some(
+                                    (e) => isEventNew(e, lastLogin) || isEventUpdated(e, lastLogin),
+                                  );
+
+                                  return (
+                                    <div key={cityGroup.city}>
+
+                                      {/* City row — depth 2, pl-10 */}
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleCity(cityGroup.city)}
+                                        className={`${rowBase} pl-10 ${isCityOpen ? "bg-cyan-50 text-cyan-900" : "hover:bg-gray-50"}`}
+                                      >
+                                        <Chevron expanded={isCityOpen} />
+                                        <span className="flex-1 truncate">{cityGroup.city}</span>
+                                        {cityFresh && !isCityOpen && <FreshDot />}
+                                        <CountBadge n={cityGroup.eventCount} />
+                                      </button>
+
+                                      {/* Events — depth 3 */}
+                                      {isCityOpen && (
+                                        <div className="divide-y divide-gray-100 border-t border-gray-100">
+                                          {cityEvents.map((event) => (
+                                            <EventRow
+                                              key={event.id}
+                                              event={event}
+                                              lastLogin={lastLogin}
+                                            />
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
                           </div>

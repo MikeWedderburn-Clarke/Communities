@@ -79,6 +79,12 @@ export interface EventSummary {
   isPast: boolean;
   /** The logged-in user's own RSVP for this event, or null if not RSVPed */
   userRsvp: { role: Role; paymentStatus: string | null } | null;
+  /** ID of the event group this event belongs to, or null */
+  groupId: string | null;
+  /** Name of the event group, or null */
+  groupName: string | null;
+  /** True when ticket types exist for this event (ticket-booking flow instead of RSVP) */
+  hasTicketTypes: boolean;
 }
 
 export interface EventDetail extends EventSummary {
@@ -92,6 +98,10 @@ export interface EventDetail extends EventSummary {
   visibleAttendees: { userId: string; name: string; role: Role; hidden: boolean; isTeaching: boolean; socialLinks: { facebook?: string; instagram?: string; website?: string; youtube?: string } }[];
   /** Whether the current user has already RSVP'd. */
   currentUserRsvp: { role: Role; showName: boolean; isTeaching: boolean } | null;
+  /** Ticket types available for this event (empty when RSVP flow is used instead) */
+  ticketTypes: TicketType[];
+  /** The current user's booking for a ticket covering this event, or null */
+  userBooking: Booking | null;
 }
 
 export interface RsvpInput {
@@ -113,6 +123,7 @@ export interface SessionUser {
   homeCity: string | null;
   useCurrentLocation: boolean;
   lastLogin: string | null;
+  freshSince: string | null;
 }
 
 /** Full profile for the user's own editing page. */
@@ -153,6 +164,141 @@ export interface TeacherRequest {
   userName: string;
   userEmail: string;
   requestedAt: string; // ISO-8601
+}
+
+// ── Event Groups and Ticketing ────────────────────────────────────
+
+export const BOOKING_PAYMENT_STATUSES = ["pending", "paid", "concession_paid", "comp", "refunded"] as const;
+export type BookingPaymentStatus = (typeof BOOKING_PAYMENT_STATUSES)[number];
+
+export const EVENT_GROUP_TYPES = ["festival", "combo", "series"] as const;
+export type EventGroupType = (typeof EVENT_GROUP_TYPES)[number];
+
+export const EVENT_GROUP_STATUSES = ["draft", "published"] as const;
+export type EventGroupStatus = (typeof EVENT_GROUP_STATUSES)[number];
+
+export interface TicketType {
+  id: string;
+  groupId: string;
+  name: string;
+  description: string | null;
+  costAmount: number;
+  costCurrency: string;
+  concessionAmount: number | null;
+  capacity: number | null;
+  /** Derived: count of non-refunded bookings for this ticket type */
+  bookedCount: number;
+  isAvailable: boolean;
+  /** Derived: true when capacity is set and bookedCount >= capacity */
+  isSoldOut: boolean;
+  sortOrder: number;
+  /** Event IDs that this ticket grants access to */
+  coveredEventIds: string[];
+}
+
+export interface EventGroupSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  type: EventGroupType;
+  status: EventGroupStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EventGroupDetail extends EventGroupSummary {
+  memberEvents: {
+    eventId: string;
+    sortOrder: number;
+    title: string;
+    dateTime: string;
+    endDateTime: string;
+  }[];
+  ticketTypes: TicketType[];
+}
+
+export interface Booking {
+  id: string;
+  userId: string;
+  ticketTypeId: string;
+  /** Denormalised for display */
+  ticketTypeName: string;
+  groupId: string;
+  /** Denormalised for display */
+  groupName: string;
+  role: Role | null;
+  showName: boolean;
+  isTeaching: boolean;
+  paymentStatus: BookingPaymentStatus;
+  amountPaid: number | null;
+  currency: string | null;
+  bookedAt: string;
+  cancelledAt: string | null;
+  notes: string | null;
+}
+
+export interface TeacherSplit {
+  id: string;
+  ticketTypeId: string;
+  /** Denormalised for display */
+  ticketTypeName: string;
+  teacherUserId: string;
+  /** Denormalised for display */
+  teacherName: string;
+  fixedAmount: number;
+  currency: string;
+}
+
+export interface TeacherReportLine {
+  teacherUserId: string;
+  teacherName: string;
+  ticketTypeId: string;
+  ticketTypeName: string;
+  /** Count of bookings with paymentStatus "paid" or "concession_paid" */
+  paidBookingCount: number;
+  fixedAmountPerBooking: number;
+  currency: string;
+  /** paidBookingCount * fixedAmountPerBooking */
+  totalEarned: number;
+}
+
+export interface CreateEventGroupInput {
+  name: string;
+  description: string | null;
+  type: EventGroupType;
+}
+
+export interface CreateTicketTypeInput {
+  groupId: string;
+  name: string;
+  description: string | null;
+  costAmount: number;
+  costCurrency: string;
+  concessionAmount: number | null;
+  capacity: number | null;
+  /** Must contain at least one event ID */
+  coveredEventIds: string[];
+  sortOrder: number;
+}
+
+export interface CreateBookingInput {
+  ticketTypeId: string;
+  role: Role | null;
+  showName: boolean;
+  isTeaching: boolean;
+}
+
+export interface UpdateBookingStatusInput {
+  paymentStatus: BookingPaymentStatus;
+  amountPaid: number | null;
+  notes: string | null;
+}
+
+export interface SetTeacherSplitInput {
+  ticketTypeId: string;
+  teacherUserId: string;
+  fixedAmount: number;
+  currency: string;
 }
 
 // ── Event creation / approval ─────────────────────────────────────
@@ -211,4 +357,12 @@ export interface CountryGroup {
   eventCount: number;
 }
 
-export type LocationHierarchy = CountryGroup[];
+export interface ContinentGroup {
+  continent: string;
+  latitude: number;
+  longitude: number;
+  countries: CountryGroup[];
+  eventCount: number;
+}
+
+export type LocationHierarchy = ContinentGroup[];
