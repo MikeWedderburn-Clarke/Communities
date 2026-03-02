@@ -6,7 +6,7 @@ Web app first for iteration; keep architecture open so iOS/Android clients can b
 
 ## Tech stack
 - **Framework:** Next.js 15, App Router, React Server Components by default
-- **Database:** SQLite via `better-sqlite3`, managed with Drizzle ORM; single local file `community.db`
+- **Database:** PostgreSQL via `pg` (node-postgres), managed with Drizzle ORM. Local dev uses Docker Compose (`docker compose up -d`); production uses Azure Database for PostgreSQL.
 - **Styling:** Tailwind CSS v4
 - **Maps:** Leaflet + react-leaflet + react-leaflet-cluster
 - **Testing:** Vitest with in-memory SQLite (helpers in `src/db/test-utils.ts`)
@@ -36,7 +36,7 @@ Web app first for iteration; keep architecture open so iOS/Android clients can b
 - **Payment processing** — cost/concession fields are stored and displayed, but no payment gateway (Stripe etc.) is integrated; the cost fields are a data foundation for a future payments feature.
 - **Email notifications** — no emails sent for event approvals, RSVP confirmations, or teacher decisions
 - **Rate limiting** — API endpoints have no request throttling
-- **CI/CD and deployment config** — no GitHub Actions, Vercel config, or Dockerfile
+- **CI/CD** — GitHub Actions workflow (`deploy.yml`) builds the Docker image, pushes to Azure Container Registry, runs `db:migrate` against Azure Postgres, then deploys to Azure Container Apps. Requires secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `DATABASE_URL`; and vars: `AZURE_REGISTRY`, `AZURE_APP_NAME`, `AZURE_RESOURCE_GROUP`.
 - **Image uploads** — events and profiles have no photos; no blob storage configured
 - **Share card generation** — share-by-link works; visual share card does not exist yet
 - **Event series management UI** — recurrence logic and DB fields exist; no UI to edit or cancel a whole series
@@ -63,7 +63,11 @@ Web app first for iteration; keep architecture open so iOS/Android clients can b
 - If you are asked to write tests, make sure to cover edge cases and validate core business rules.
 - After every code update, run the full post-change cycle in this exact order:
   ```
-  npm run test && npx tsc --noEmit && npm run build && rm -f community.db community.db-shm community.db-wal && npm run db:seed && npm run dev
+  npm run test && npx tsc --noEmit && npm run build && npm run dev
+  ```
+- To start a completely fresh local database (wipe all data and reseed):
+  ```
+  docker compose down -v && docker compose up -d && npm run db:migrate && npm run db:seed
   ```
 - Once `npm run dev` is up, pre-warm the app by requesting the landing page and key routes (e.g. `curl http://localhost:3000/`, `/events`, and one event detail) so caches and ISR paths are ready.
 

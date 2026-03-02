@@ -1,0 +1,106 @@
+name: CI / Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Tests ─────────────────────────────────────────────────────────
+  test:
+    name: Test & type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        run: npm test
+
+  # ── Build & Deploy ────────────────────────────────────────────────
+  deploy:
+    name: Build, push & deploy
+    runs-on: ubuntu-latest
+    needs: test
+    # Only deploy on pushes to main (not on PRs)
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+
+    permissions:
+      contents: read
+      id-token: write # Required for OIDC authentication to Azure
+
+    env:
+      REGISTRY: ${{ vars.AZURE_REGISTRY }}          # e.g. communitiescr.azurecr.io
+      APP_NAME: ${{ vars.AZURE_APP_NAME }}           # e.g. communities
+      RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }} # e.g. rg-communities
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        run: az acr login --name ${{ env.REGISTRY }}
+
+      - name: Set image tag
+        id: image
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "tag=${{ env.REGISTRY }}/${{ env.APP_NAME }}:sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "latest=${{ env.REGISTRY }}/${{ env.APP_NAME }}:latest" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.image.outputs.tag }}
+            ${{ steps.image.outputs.latest }}
+          cache-from: type=registry,ref=${{ steps.image.outputs.latest }}
+          cache-to: type=inline
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          npm ci
+          npm run db:migrate
+
+      - name: Deploy to Azure Container Apps
+        run: |
+          az containerapp update \
+            --name "${{ env.APP_NAME }}" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --image "${{ steps.image.outputs.tag }}"
+
+      - name: Show app URL
+        run: |
+          az containerapp show \
+            --name "${{ env.APP_NAME }}" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --query "properties.configuration.ingress.fqdn" \
+            --output tsv

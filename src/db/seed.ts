@@ -1,464 +1,280 @@
-import Database from "better-sqlite3";
-import path from "path";
+/**
+ * Seed script for local development.
+ * Requires PostgreSQL to be running and migrations applied first:
+ *   npm run db:migrate
+ *   npm run db:seed
+ */
+import { config } from "dotenv";
+config({ path: ".env.local" });
 
-const DB_PATH = process.env.DB_PATH ?? path.join(process.cwd(), "community.db");
-const sqlite = new Database(DB_PATH);
-sqlite.pragma("journal_mode = WAL");
-sqlite.pragma("foreign_keys = ON");
+import { db, pool } from "./index";
+import { users, locations, events, rsvps } from "./schema";
 
-// ── Create tables ──────────────────────────────────────────────────
-sqlite.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE,
-    is_admin INTEGER NOT NULL DEFAULT 0,
-    is_teacher_approved INTEGER NOT NULL DEFAULT 0,
-    teacher_requested_at TEXT,
-    teacher_approved_by TEXT,
-    default_role TEXT,
-    default_show_name INTEGER,
-    facebook_url TEXT,
-    instagram_url TEXT,
-    website_url TEXT,
-    youtube_url TEXT,
-    show_facebook INTEGER NOT NULL DEFAULT 0,
-    show_instagram INTEGER NOT NULL DEFAULT 0,
-    show_website INTEGER NOT NULL DEFAULT 0,
-    show_youtube INTEGER NOT NULL DEFAULT 0,
-    home_city TEXT,
-    use_current_location INTEGER NOT NULL DEFAULT 0,
-    last_login TEXT
-  );
-  CREATE TABLE IF NOT EXISTS locations (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    city TEXT NOT NULL,
-    country TEXT NOT NULL,
-    latitude REAL NOT NULL,
-    longitude REAL NOT NULL,
-    what3names TEXT,
-    how_to_find TEXT,
-    created_by TEXT REFERENCES users(id)
-  );
-  CREATE UNIQUE INDEX IF NOT EXISTS locations_name_city_country_unique ON locations(name, city, country);
-  CREATE TABLE IF NOT EXISTS events (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    description TEXT NOT NULL,
-    date_time TEXT NOT NULL,
-    end_date_time TEXT NOT NULL,
-    location_id TEXT NOT NULL REFERENCES locations(id),
-    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('approved','pending','rejected')),
-    created_by TEXT REFERENCES users(id),
-    date_added TEXT NOT NULL,
-    last_updated TEXT NOT NULL,
-    recurrence_type TEXT NOT NULL DEFAULT 'none' CHECK(recurrence_type IN ('none','daily','weekly','monthly')),
-    recurrence_end_date TEXT,
-    skill_level TEXT NOT NULL DEFAULT 'All levels' CHECK(skill_level IN ('Beginner','Intermediate','Advanced','All levels')),
-    prerequisites TEXT,
-    cost_amount REAL,
-    cost_currency TEXT,
-    concession_amount REAL,
-    max_attendees INTEGER
-  );
-  CREATE TABLE IF NOT EXISTS rsvps (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_id TEXT NOT NULL REFERENCES events(id),
-    user_id TEXT NOT NULL REFERENCES users(id),
-    role TEXT NOT NULL CHECK(role IN ('Base','Flyer','Hybrid')),
-    show_name INTEGER NOT NULL DEFAULT 0,
-    is_teaching INTEGER NOT NULL DEFAULT 0,
-    payment_status TEXT
-  );
-  CREATE UNIQUE INDEX IF NOT EXISTS rsvps_event_user_unique ON rsvps(event_id, user_id);
-  CREATE INDEX IF NOT EXISTS events_status_datetime_idx ON events(status, date_time);
-`);
+async function seed() {
+  // ── Users ────────────────────────────────────────────────────────
+  await db.insert(users).values([
+    {
+      id: "user-alice", name: "Alice Johnson", email: "alice@example.com",
+      isAdmin: false, isTeacherApproved: true,
+      teacherRequestedAt: "2026-01-01T00:00:00Z", teacherApprovedBy: "user-dan",
+      defaultRole: "Base", defaultShowName: true,
+      facebookUrl: "https://facebook.com/alicejohnson", instagramUrl: "https://instagram.com/alice_acro",
+      websiteUrl: null, youtubeUrl: null,
+      showFacebook: true, showInstagram: true, showWebsite: false, showYoutube: false,
+      homeCity: null, useCurrentLocation: false,
+      lastLogin: "2026-03-05T08:00:00Z", previousLogin: "2026-02-22T00:00:00Z",
+    },
+    {
+      id: "user-bob", name: "Bob Smith", email: "bob@example.com",
+      isAdmin: false, isTeacherApproved: false,
+      teacherRequestedAt: "2026-02-20T00:00:00Z", teacherApprovedBy: null,
+      defaultRole: "Flyer", defaultShowName: true,
+      facebookUrl: null, instagramUrl: "https://instagram.com/bob_flies",
+      websiteUrl: null, youtubeUrl: null,
+      showFacebook: false, showInstagram: true, showWebsite: false, showYoutube: false,
+      homeCity: null, useCurrentLocation: false,
+      lastLogin: "2026-03-02T10:30:00Z", previousLogin: "2026-02-22T00:00:00Z",
+    },
+    {
+      id: "user-carol", name: "Carol Williams", email: "carol@example.com",
+      isAdmin: false, isTeacherApproved: false,
+      teacherRequestedAt: null, teacherApprovedBy: null,
+      defaultRole: null, defaultShowName: null,
+      facebookUrl: null, instagramUrl: null,
+      websiteUrl: null, youtubeUrl: null,
+      showFacebook: false, showInstagram: false, showWebsite: false, showYoutube: false,
+      homeCity: null, useCurrentLocation: false,
+      lastLogin: null, previousLogin: null,
+    },
+    {
+      id: "user-dan", name: "Dan Brown", email: "dan@example.com",
+      isAdmin: true, isTeacherApproved: false,
+      teacherRequestedAt: null, teacherApprovedBy: null,
+      defaultRole: "Flyer", defaultShowName: false,
+      facebookUrl: null, instagramUrl: null,
+      websiteUrl: "https://danbrown-acro.com", youtubeUrl: null,
+      showFacebook: false, showInstagram: false, showWebsite: true, showYoutube: false,
+      homeCity: null, useCurrentLocation: false,
+      lastLogin: "2026-03-04T09:45:00Z", previousLogin: "2026-02-22T00:00:00Z",
+    },
+  ]).onConflictDoNothing();
 
-// ── Seed users (mock auth accounts) ────────────────────────────────
-const seedUsers = [
-  {
-    id: "user-alice", name: "Alice Johnson", email: "alice@example.com",
-    isAdmin: 0, isTeacherApproved: 1,
-    teacherRequestedAt: "2026-01-01T00:00:00Z", teacherApprovedBy: "user-dan",
-    defaultRole: "Base", defaultShowName: 1,
-    facebookUrl: "https://facebook.com/alicejohnson", instagramUrl: "https://instagram.com/alice_acro",
-    websiteUrl: null, youtubeUrl: null,
-    showFacebook: 1, showInstagram: 1, showWebsite: 0, showYoutube: 0,
-    lastLogin: "2026-03-05T08:00:00Z",
-  },
-  {
-    id: "user-bob", name: "Bob Smith", email: "bob@example.com",
-    isAdmin: 0, isTeacherApproved: 0,
-    teacherRequestedAt: "2026-02-20T00:00:00Z", teacherApprovedBy: null,
-    defaultRole: "Flyer", defaultShowName: 1,
-    facebookUrl: null, instagramUrl: "https://instagram.com/bob_flies",
-    websiteUrl: null, youtubeUrl: null,
-    showFacebook: 0, showInstagram: 1, showWebsite: 0, showYoutube: 0,
-    lastLogin: "2026-03-02T10:30:00Z",
-  },
-  {
-    id: "user-carol", name: "Carol Williams", email: "carol@example.com",
-    isAdmin: 0, isTeacherApproved: 0,
-    teacherRequestedAt: null, teacherApprovedBy: null,
-    defaultRole: null, defaultShowName: null,
-    facebookUrl: null, instagramUrl: null,
-    websiteUrl: null, youtubeUrl: null,
-    showFacebook: 0, showInstagram: 0, showWebsite: 0, showYoutube: 0,
-    lastLogin: null,
-  },
-  {
-    id: "user-dan", name: "Dan Brown", email: "dan@example.com",
-    isAdmin: 1, isTeacherApproved: 0,
-    teacherRequestedAt: null, teacherApprovedBy: null,
-    defaultRole: "Flyer", defaultShowName: 0,
-    facebookUrl: null, instagramUrl: null,
-    websiteUrl: "https://danbrown-acro.com", youtubeUrl: null,
-    showFacebook: 0, showInstagram: 0, showWebsite: 1, showYoutube: 0,
-    lastLogin: "2026-03-04T09:45:00Z",
-  },
-];
+  // ── Locations ────────────────────────────────────────────────────
+  await db.insert(locations).values([
+    { id: "loc-regents-park", name: "Regent's Park", city: "London", country: "United Kingdom", latitude: 51.5273, longitude: -0.1535, what3names: "gently.snowy.magic", howToFind: "Meet near the bandstand by the cafe.", createdBy: "user-dan" },
+    { id: "loc-gym-brixton", name: "The Gym Group Brixton", city: "London", country: "United Kingdom", latitude: 51.4613, longitude: -0.1150, what3names: "bench.crossing.now", howToFind: "Enter through the main gym on Brixton Hill.", createdBy: "user-dan" },
+    { id: "loc-colombo", name: "Colombo Centre, Elephant & Castle", city: "London", country: "United Kingdom", latitude: 51.4946, longitude: -0.1008, what3names: null, howToFind: null, createdBy: "user-dan" },
+    { id: "loc-laban", name: "Laban Dance Centre, Greenwich", city: "London", country: "United Kingdom", latitude: 51.4741, longitude: -0.0143, what3names: null, howToFind: null, createdBy: "user-dan" },
+    { id: "loc-victoria-park", name: "Victoria Park, Hackney", city: "London", country: "United Kingdom", latitude: 51.5368, longitude: -0.0396, what3names: null, howToFind: null, createdBy: "user-dan" },
+    { id: "loc-central-park", name: "Central Park Great Lawn", city: "New York", country: "United States", latitude: 40.7812, longitude: -73.9665, what3names: "open.perfect.lawn", howToFind: "Meet near the Delacorte Theater steps.", createdBy: "user-dan" },
+    { id: "loc-prospect-park", name: "Prospect Park Long Meadow", city: "New York", country: "United States", latitude: 40.6602, longitude: -73.9690, what3names: null, howToFind: null, createdBy: "user-dan" },
+    { id: "loc-domino-park", name: "Domino Park, Williamsburg", city: "New York", country: "United States", latitude: 40.7135, longitude: -73.9683, what3names: null, howToFind: null, createdBy: "user-dan" },
+    { id: "loc-castle-park", name: "Castle Park", city: "Bristol", country: "United Kingdom", latitude: 51.4530, longitude: -2.5900, what3names: null, howToFind: null, createdBy: "user-dan" },
+    { id: "loc-the-motion", name: "The Motion", city: "Bristol", country: "United Kingdom", latitude: 51.4490, longitude: -2.5830, what3names: null, howToFind: null, createdBy: "user-dan" },
+    { id: "loc-boscombe-beach", name: "Boscombe Beach", city: "Bournemouth", country: "United Kingdom", latitude: 50.7198, longitude: -1.8400, what3names: null, howToFind: null, createdBy: "user-dan" },
+    { id: "loc-shelley-park", name: "Shelley Park", city: "Bournemouth", country: "United Kingdom", latitude: 50.7220, longitude: -1.8530, what3names: null, howToFind: null, createdBy: "user-dan" },
+  ]).onConflictDoNothing();
 
-const insertUser = sqlite.prepare(
-  `INSERT OR IGNORE INTO users
-   (id, name, email, is_admin, is_teacher_approved, teacher_requested_at, teacher_approved_by,
-    default_role, default_show_name, facebook_url, instagram_url, website_url, youtube_url,
-    show_facebook, show_instagram, show_website, show_youtube, home_city, use_current_location, last_login)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-);
-for (const u of seedUsers) {
-  insertUser.run(
-    u.id, u.name, u.email, u.isAdmin, u.isTeacherApproved, u.teacherRequestedAt, u.teacherApprovedBy,
-    u.defaultRole, u.defaultShowName, u.facebookUrl, u.instagramUrl, u.websiteUrl, u.youtubeUrl,
-    u.showFacebook, u.showInstagram, u.showWebsite, u.showYoutube, null, 0, u.lastLogin
-  );
+  // ── Events ───────────────────────────────────────────────────────
+  await db.insert(events).values([
+    {
+      id: "evt-sunday-jam", title: "Sunday AcroYoga Jam",
+      description: "Open-level jam in Regent's Park. Bring a mat and good vibes! All levels welcome.",
+      dateTime: "2026-03-08T11:00:00Z", endDateTime: "2026-03-08T14:00:00Z",
+      locationId: "loc-regents-park", status: "approved", createdBy: "user-dan",
+      dateAdded: "2026-02-15T08:00:00Z", lastUpdated: "2026-03-01T09:00:00Z",
+      recurrenceType: "weekly", recurrenceEndDate: "2026-06-30T23:59:59Z",
+      skillLevel: "All levels", prerequisites: null, costAmount: null, costCurrency: null, concessionAmount: null, maxAttendees: null,
+    },
+    {
+      id: "evt-beginner-workshop", title: "Beginner AcroYoga Workshop",
+      description: "A 2-hour introduction to AcroYoga covering bird, throne, and basic washing machines. No partner required — we rotate throughout.",
+      dateTime: "2026-03-14T10:00:00Z", endDateTime: "2026-03-14T12:00:00Z",
+      locationId: "loc-gym-brixton", status: "approved", createdBy: "user-dan",
+      dateAdded: "2026-02-16T08:00:00Z", lastUpdated: "2026-03-07T10:00:00Z",
+      recurrenceType: "none", recurrenceEndDate: null,
+      skillLevel: "Beginner", prerequisites: null, costAmount: 15, costCurrency: "GBP", concessionAmount: 10, maxAttendees: 12,
+    },
+    {
+      id: "evt-flight-night", title: "Friday Flight Night",
+      description: "Weekly evening session focused on intermediate flows and standing acro. Warm-up included. Mats provided.",
+      dateTime: "2026-03-20T18:30:00Z", endDateTime: "2026-03-20T21:00:00Z",
+      locationId: "loc-colombo", status: "approved", createdBy: "user-dan",
+      dateAdded: "2026-02-17T08:00:00Z", lastUpdated: "2026-03-04T10:30:00Z",
+      recurrenceType: "none", recurrenceEndDate: null,
+      skillLevel: "Intermediate", prerequisites: "• Comfortable holding bird pose for 10 seconds\n• Confident base in basic L-basing",
+      costAmount: 8, costCurrency: "GBP", concessionAmount: null, maxAttendees: 8,
+    },
+    {
+      id: "evt-washing-machine", title: "Washing Machine Masterclass",
+      description: "Deep dive into washing machine transitions — icarian, whip, and reverse flows. Intermediate level recommended.",
+      dateTime: "2026-03-28T14:00:00Z", endDateTime: "2026-03-28T17:00:00Z",
+      locationId: "loc-laban", status: "approved", createdBy: "user-dan",
+      dateAdded: "2026-02-18T08:00:00Z", lastUpdated: "2026-03-06T11:00:00Z",
+      recurrenceType: "none", recurrenceEndDate: null,
+      skillLevel: "Advanced", prerequisites: "• Solid washing machine foundation (pop to Star)\n• Confident in icarian entry and exit\n• Able to safely spot a flying partner",
+      costAmount: 25, costCurrency: "GBP", concessionAmount: 18, maxAttendees: 16,
+    },
+    {
+      id: "evt-park-jam-april", title: "Spring Park Jam",
+      description: "Celebrating the warmer weather with a big outdoor jam. All levels, family-friendly. We'll have a dedicated beginners' circle.",
+      dateTime: "2026-04-05T12:00:00Z", endDateTime: "2026-04-05T16:00:00Z",
+      locationId: "loc-victoria-park", status: "approved", createdBy: "user-dan",
+      dateAdded: "2026-02-20T08:00:00Z", lastUpdated: "2026-03-02T08:30:00Z",
+      recurrenceType: "none", recurrenceEndDate: null,
+      skillLevel: "All levels", prerequisites: null, costAmount: null, costCurrency: null, concessionAmount: null, maxAttendees: null,
+    },
+    {
+      id: "evt-ny-central-park-jam", title: "Central Park AcroYoga Jam",
+      description: "Weekly open jam on the Great Lawn. All levels, bring a mat. We'll be near the Delacorte Theater.",
+      dateTime: "2026-03-15T14:00:00Z", endDateTime: "2026-03-15T17:00:00Z",
+      locationId: "loc-central-park", status: "approved", createdBy: "user-dan",
+      dateAdded: "2026-03-02T08:00:00Z", lastUpdated: "2026-03-15T09:00:00Z",
+      recurrenceType: "weekly", recurrenceEndDate: "2026-07-01T23:59:59Z",
+      skillLevel: "All levels", prerequisites: null, costAmount: null, costCurrency: null, concessionAmount: null, maxAttendees: null,
+    },
+    {
+      id: "evt-ny-beginner-intro", title: "NYC Beginner Intro to AcroYoga",
+      description: "First time? Perfect. Learn bird, throne, and basic safety. Partners rotated throughout. No experience needed.",
+      dateTime: "2026-03-22T11:00:00Z", endDateTime: "2026-03-22T13:00:00Z",
+      locationId: "loc-central-park", status: "approved", createdBy: "user-dan",
+      dateAdded: "2026-03-02T08:30:00Z", lastUpdated: "2026-03-15T09:30:00Z",
+      recurrenceType: "none", recurrenceEndDate: null,
+      skillLevel: "Beginner", prerequisites: null, costAmount: 20, costCurrency: "USD", concessionAmount: 12, maxAttendees: null,
+    },
+    {
+      id: "evt-ny-prospect-flow", title: "Prospect Park Flow Session",
+      description: "Intermediate flow practice — washing machines, whips, and pops. Meet at the Long Meadow south entrance.",
+      dateTime: "2026-03-29T10:00:00Z", endDateTime: "2026-03-29T12:30:00Z",
+      locationId: "loc-prospect-park", status: "approved", createdBy: "user-dan",
+      dateAdded: "2026-03-02T09:00:00Z", lastUpdated: "2026-03-15T10:00:00Z",
+      recurrenceType: "none", recurrenceEndDate: null,
+      skillLevel: "Intermediate", prerequisites: "• At least 3 months of regular AcroYoga practice\n• Comfortable in bird and star",
+      costAmount: null, costCurrency: null, concessionAmount: null, maxAttendees: null,
+    },
+    {
+      id: "evt-ny-domino-sunset", title: "Sunset Acro at Domino Park",
+      description: "Evening session with Manhattan skyline views. Standing acro and L-basing. Intermediate level.",
+      dateTime: "2026-04-04T17:30:00Z", endDateTime: "2026-04-04T20:00:00Z",
+      locationId: "loc-domino-park", status: "approved", createdBy: "user-dan",
+      dateAdded: "2026-03-03T09:30:00Z", lastUpdated: "2026-03-16T18:00:00Z",
+      recurrenceType: "none", recurrenceEndDate: null,
+      skillLevel: "Intermediate", prerequisites: null, costAmount: null, costCurrency: null, concessionAmount: null, maxAttendees: null,
+    },
+    {
+      id: "evt-ny-spring-festival", title: "NYC Spring AcroYoga Festival",
+      description: "All-day festival with workshops, jams, and performances. Multiple teachers. All levels welcome!",
+      dateTime: "2026-04-12T10:00:00Z", endDateTime: "2026-04-12T18:00:00Z",
+      locationId: "loc-prospect-park", status: "approved", createdBy: "user-dan",
+      dateAdded: "2026-03-03T10:00:00Z", lastUpdated: "2026-03-16T12:00:00Z",
+      recurrenceType: "none", recurrenceEndDate: null,
+      skillLevel: "All levels", prerequisites: null, costAmount: 45, costCurrency: "USD", concessionAmount: 30, maxAttendees: null,
+    },
+    {
+      id: "evt-bristol-castle-jam", title: "Bristol Castle Park Jam",
+      description: "Friendly open jam in Castle Park. All levels, just bring a mat and a smile.",
+      dateTime: "2026-03-16T11:00:00Z", endDateTime: "2026-03-16T14:00:00Z",
+      locationId: "loc-castle-park", status: "approved", createdBy: "user-dan",
+      dateAdded: "2026-03-03T11:00:00Z", lastUpdated: "2026-03-04T12:00:00Z",
+      recurrenceType: "weekly", recurrenceEndDate: "2026-05-31T23:59:59Z",
+      skillLevel: "All levels", prerequisites: null, costAmount: null, costCurrency: null, concessionAmount: null, maxAttendees: null,
+    },
+    {
+      id: "evt-bristol-motion-workshop", title: "Bristol Intermediate Workshop",
+      description: "Two-hour workshop at The Motion covering intermediate flows, pops, and icarian. Some experience recommended.",
+      dateTime: "2026-03-23T14:00:00Z", endDateTime: "2026-03-23T16:00:00Z",
+      locationId: "loc-the-motion", status: "approved", createdBy: "user-dan",
+      dateAdded: "2026-03-03T11:30:00Z", lastUpdated: "2026-03-04T12:30:00Z",
+      recurrenceType: "none", recurrenceEndDate: null,
+      skillLevel: "Intermediate", prerequisites: "• Able to hold a stable bird as base or flyer\n• Comfortable with basic washing machine",
+      costAmount: 12, costCurrency: "GBP", concessionAmount: 8, maxAttendees: null,
+    },
+    {
+      id: "evt-bristol-spring-jam", title: "Bristol Spring Outdoor Jam",
+      description: "Welcoming the spring sunshine with an outdoor session. Beginners corner available. Bring snacks to share!",
+      dateTime: "2026-04-06T12:00:00Z", endDateTime: "2026-04-06T15:00:00Z",
+      locationId: "loc-castle-park", status: "approved", createdBy: "user-dan",
+      dateAdded: "2026-03-03T12:00:00Z", lastUpdated: "2026-03-04T13:00:00Z",
+      recurrenceType: "none", recurrenceEndDate: null,
+      skillLevel: "All levels", prerequisites: null, costAmount: null, costCurrency: null, concessionAmount: null, maxAttendees: null,
+    },
+    {
+      id: "evt-demo-new", title: "Laban New Arrivals Session",
+      description: "Brand-new event added this week. Open to all levels. Come and meet the new faces joining the community.",
+      dateTime: "2026-04-07T19:00:00Z", endDateTime: "2026-04-07T21:00:00Z",
+      locationId: "loc-laban", status: "approved", createdBy: "user-dan",
+      dateAdded: "2026-03-01T09:00:00Z", lastUpdated: "2026-03-01T09:00:00Z",
+      recurrenceType: "none", recurrenceEndDate: null,
+      skillLevel: "All levels", prerequisites: null, costAmount: null, costCurrency: null, concessionAmount: null, maxAttendees: null,
+    },
+    {
+      id: "evt-demo-updated", title: "Victoria Park Updated Jam",
+      description: "This event was recently updated with a new time and location details. Check the latest info before attending.",
+      dateTime: "2026-04-14T10:00:00Z", endDateTime: "2026-04-14T13:00:00Z",
+      locationId: "loc-victoria-park", status: "approved", createdBy: "user-dan",
+      dateAdded: "2026-01-20T08:00:00Z", lastUpdated: "2026-03-03T11:00:00Z",
+      recurrenceType: "none", recurrenceEndDate: null,
+      skillLevel: "Intermediate", prerequisites: "• Comfortable in bird and star",
+      costAmount: null, costCurrency: null, concessionAmount: null, maxAttendees: null,
+    },
+    {
+      id: "evt-demo-full", title: "Colombo Sold-Out Workshop",
+      description: "This intimate workshop is now fully booked. Join the waitlist on the event page and we may open more spots.",
+      dateTime: "2026-04-10T18:30:00Z", endDateTime: "2026-04-10T20:30:00Z",
+      locationId: "loc-colombo", status: "approved", createdBy: "user-dan",
+      dateAdded: "2026-02-10T08:00:00Z", lastUpdated: "2026-02-10T08:00:00Z",
+      recurrenceType: "none", recurrenceEndDate: null,
+      skillLevel: "Intermediate", prerequisites: null, costAmount: 10, costCurrency: "GBP", concessionAmount: 7, maxAttendees: 2,
+    },
+    {
+      id: "evt-demo-past", title: "Brixton Winter Jam",
+      description: "A cosy winter jam at The Gym Group Brixton. Great fun was had — looking forward to the next one!",
+      dateTime: "2026-01-20T11:00:00Z", endDateTime: "2026-01-20T14:00:00Z",
+      locationId: "loc-gym-brixton", status: "approved", createdBy: "user-dan",
+      dateAdded: "2026-01-10T08:00:00Z", lastUpdated: "2026-01-10T08:00:00Z",
+      recurrenceType: "none", recurrenceEndDate: null,
+      skillLevel: "All levels", prerequisites: null, costAmount: null, costCurrency: null, concessionAmount: null, maxAttendees: null,
+    },
+    {
+      id: "evt-bournemouth-beach-acro", title: "Boscombe Beach AcroYoga",
+      description: "AcroYoga on the sand! Soft landing guaranteed. All levels. Meet by the pier at 10am.",
+      dateTime: "2026-03-21T10:00:00Z", endDateTime: "2026-03-21T13:00:00Z",
+      locationId: "loc-boscombe-beach", status: "approved", createdBy: "user-dan",
+      dateAdded: "2026-03-05T11:00:00Z", lastUpdated: "2026-03-06T12:00:00Z",
+      recurrenceType: "none", recurrenceEndDate: null,
+      skillLevel: "All levels", prerequisites: null, costAmount: null, costCurrency: null, concessionAmount: null, maxAttendees: null,
+    },
+    {
+      id: "evt-bournemouth-park-session", title: "Shelley Park Sunday Session",
+      description: "Relaxed Sunday practice in Shelley Park. Bring a mat, water, and sunscreen. All abilities welcome.",
+      dateTime: "2026-04-13T11:00:00Z", endDateTime: "2026-04-13T14:00:00Z",
+      locationId: "loc-shelley-park", status: "approved", createdBy: "user-dan",
+      dateAdded: "2026-03-05T11:30:00Z", lastUpdated: "2026-03-06T12:30:00Z",
+      recurrenceType: "none", recurrenceEndDate: null,
+      skillLevel: "All levels", prerequisites: null, costAmount: null, costCurrency: null, concessionAmount: null, maxAttendees: null,
+    },
+  ]).onConflictDoNothing();
+
+  // ── RSVPs ────────────────────────────────────────────────────────
+  await db.insert(rsvps).values([
+    { eventId: "evt-sunday-jam",        userId: "user-alice", role: "Base",   showName: true,  isTeaching: true,  paymentStatus: null },
+    { eventId: "evt-sunday-jam",        userId: "user-bob",   role: "Flyer",  showName: true,  isTeaching: false, paymentStatus: null },
+    { eventId: "evt-sunday-jam",        userId: "user-carol", role: "Hybrid", showName: false, isTeaching: false, paymentStatus: null },
+    { eventId: "evt-beginner-workshop", userId: "user-alice", role: "Base",   showName: true,  isTeaching: true,  paymentStatus: null },
+    { eventId: "evt-beginner-workshop", userId: "user-dan",   role: "Flyer",  showName: true,  isTeaching: false, paymentStatus: null },
+    { eventId: "evt-flight-night",      userId: "user-bob",   role: "Hybrid", showName: true,  isTeaching: false, paymentStatus: null },
+    { eventId: "evt-flight-night",      userId: "user-carol", role: "Base",   showName: true,  isTeaching: false, paymentStatus: null },
+    { eventId: "evt-flight-night",      userId: "user-dan",   role: "Flyer",  showName: false, isTeaching: false, paymentStatus: null },
+    { eventId: "evt-washing-machine",   userId: "user-alice", role: "Flyer",  showName: true,  isTeaching: false, paymentStatus: null },
+    { eventId: "evt-demo-full",         userId: "user-alice", role: "Base",   showName: true,  isTeaching: false, paymentStatus: null },
+    { eventId: "evt-demo-full",         userId: "user-bob",   role: "Flyer",  showName: true,  isTeaching: false, paymentStatus: null },
+  ]).onConflictDoNothing();
+
+  console.log("Seed complete.");
+  await pool.end();
 }
 
-// ── Seed locations (London + New York + Bristol + Bournemouth) ──────
-const seedLocations = [
-  { id: "loc-regents-park", name: "Regent's Park", city: "London", country: "United Kingdom", latitude: 51.5273, longitude: -0.1535, what3names: "gently.snowy.magic", howToFind: "Meet near the bandstand by the cafe." },
-  { id: "loc-gym-brixton", name: "The Gym Group Brixton", city: "London", country: "United Kingdom", latitude: 51.4613, longitude: -0.1150, what3names: "bench.crossing.now", howToFind: "Enter through the main gym on Brixton Hill." },
-  { id: "loc-colombo", name: "Colombo Centre, Elephant & Castle", city: "London", country: "United Kingdom", latitude: 51.4946, longitude: -0.1008, what3names: null, howToFind: null },
-  { id: "loc-laban", name: "Laban Dance Centre, Greenwich", city: "London", country: "United Kingdom", latitude: 51.4741, longitude: -0.0143, what3names: null, howToFind: null },
-  { id: "loc-victoria-park", name: "Victoria Park, Hackney", city: "London", country: "United Kingdom", latitude: 51.5368, longitude: -0.0396, what3names: null, howToFind: null },
-  // New York
-  { id: "loc-central-park", name: "Central Park Great Lawn", city: "New York", country: "United States", latitude: 40.7812, longitude: -73.9665, what3names: "open.perfect.lawn", howToFind: "Meet near the Delacorte Theater steps." },
-  { id: "loc-prospect-park", name: "Prospect Park Long Meadow", city: "New York", country: "United States", latitude: 40.6602, longitude: -73.9690, what3names: null, howToFind: null },
-  { id: "loc-domino-park", name: "Domino Park, Williamsburg", city: "New York", country: "United States", latitude: 40.7135, longitude: -73.9683, what3names: null, howToFind: null },
-  // Bristol
-  { id: "loc-castle-park", name: "Castle Park", city: "Bristol", country: "United Kingdom", latitude: 51.4530, longitude: -2.5900, what3names: null, howToFind: null },
-  { id: "loc-the-motion", name: "The Motion", city: "Bristol", country: "United Kingdom", latitude: 51.4490, longitude: -2.5830, what3names: null, howToFind: null },
-  // Bournemouth
-  { id: "loc-boscombe-beach", name: "Boscombe Beach", city: "Bournemouth", country: "United Kingdom", latitude: 50.7198, longitude: -1.8400, what3names: null, howToFind: null },
-  { id: "loc-shelley-park", name: "Shelley Park", city: "Bournemouth", country: "United Kingdom", latitude: 50.7220, longitude: -1.8530, what3names: null, howToFind: null },
-];
-
-const insertLocation = sqlite.prepare(
-  "INSERT OR IGNORE INTO locations (id, name, city, country, latitude, longitude, what3names, how_to_find, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-);
-for (const l of seedLocations) {
-  insertLocation.run(l.id, l.name, l.city, l.country, l.latitude, l.longitude, l.what3names, l.howToFind, "user-dan");
-}
-
-// ── Seed events (London AcroYoga) ──────────────────────────────────
-const seedEvents = [
-  {
-    id: "evt-sunday-jam",
-    title: "Sunday AcroYoga Jam",
-    description:
-      "Open-level jam in Regent's Park. Bring a mat and good vibes! All levels welcome.",
-    dateTime: "2026-03-08T11:00:00Z",
-    endDateTime: "2026-03-08T14:00:00Z",
-    locationId: "loc-regents-park",
-    dateAdded: "2026-02-15T08:00:00Z",
-    lastUpdated: "2026-03-01T09:00:00Z",
-    recurrenceType: "weekly",
-    recurrenceEndDate: "2026-06-30T23:59:59Z",
-    skillLevel: "All levels",
-    prerequisites: null,
-    costAmount: null,
-    costCurrency: null,
-    concessionAmount: null,
-  },
-  {
-    id: "evt-beginner-workshop",
-    title: "Beginner AcroYoga Workshop",
-    description:
-      "A 2-hour introduction to AcroYoga covering bird, throne, and basic washing machines. No partner required — we rotate throughout.",
-    dateTime: "2026-03-14T10:00:00Z",
-    endDateTime: "2026-03-14T12:00:00Z",
-    locationId: "loc-gym-brixton",
-    dateAdded: "2026-02-16T08:00:00Z",
-    lastUpdated: "2026-03-07T10:00:00Z",
-    skillLevel: "Beginner",
-    prerequisites: null,
-    costAmount: 15,
-    costCurrency: "GBP",
-    concessionAmount: 10,
-    maxAttendees: 12,
-  },
-  {
-    id: "evt-flight-night",
-    title: "Friday Flight Night",
-    description:
-      "Weekly evening session focused on intermediate flows and standing acro. Warm-up included. Mats provided.",
-    dateTime: "2026-03-20T18:30:00Z",
-    endDateTime: "2026-03-20T21:00:00Z",
-    locationId: "loc-colombo",
-    dateAdded: "2026-02-17T08:00:00Z",
-    lastUpdated: "2026-03-04T10:30:00Z",
-    skillLevel: "Intermediate",
-    prerequisites: "• Comfortable holding bird pose for 10 seconds\n• Confident base in basic L-basing",
-    costAmount: 8,
-    costCurrency: "GBP",
-    concessionAmount: null,
-    maxAttendees: 8,
-  },
-  {
-    id: "evt-washing-machine",
-    title: "Washing Machine Masterclass",
-    description:
-      "Deep dive into washing machine transitions — icarian, whip, and reverse flows. Intermediate level recommended.",
-    dateTime: "2026-03-28T14:00:00Z",
-    endDateTime: "2026-03-28T17:00:00Z",
-    locationId: "loc-laban",
-    dateAdded: "2026-02-18T08:00:00Z",
-    lastUpdated: "2026-03-06T11:00:00Z",
-    skillLevel: "Advanced",
-    prerequisites: "• Solid washing machine foundation (pop to Star)\n• Confident in icarian entry and exit\n• Able to safely spot a flying partner",
-    costAmount: 25,
-    costCurrency: "GBP",
-    concessionAmount: 18,
-    maxAttendees: 16,
-  },
-  {
-    id: "evt-park-jam-april",
-    title: "Spring Park Jam",
-    description:
-      "Celebrating the warmer weather with a big outdoor jam. All levels, family-friendly. We'll have a dedicated beginners' circle.",
-    dateTime: "2026-04-05T12:00:00Z",
-    endDateTime: "2026-04-05T16:00:00Z",
-    locationId: "loc-victoria-park",
-    dateAdded: "2026-02-20T08:00:00Z",
-    lastUpdated: "2026-03-02T08:30:00Z",
-    skillLevel: "All levels",
-    prerequisites: null,
-    costAmount: null,
-    costCurrency: null,
-    concessionAmount: null,
-  },
-  // ── New York events (5) ──────────────────────────────────────────
-  {
-    id: "evt-ny-central-park-jam",
-    title: "Central Park AcroYoga Jam",
-    description:
-      "Weekly open jam on the Great Lawn. All levels, bring a mat. We'll be near the Delacorte Theater.",
-    dateTime: "2026-03-15T14:00:00Z",
-    endDateTime: "2026-03-15T17:00:00Z",
-    locationId: "loc-central-park",
-    dateAdded: "2026-03-02T08:00:00Z",
-    lastUpdated: "2026-03-15T09:00:00Z",
-    recurrenceType: "weekly",
-    recurrenceEndDate: "2026-07-01T23:59:59Z",
-    skillLevel: "All levels",
-    prerequisites: null,
-    costAmount: null,
-    costCurrency: null,
-    concessionAmount: null,
-  },
-  {
-    id: "evt-ny-beginner-intro",
-    title: "NYC Beginner Intro to AcroYoga",
-    description:
-      "First time? Perfect. Learn bird, throne, and basic safety. Partners rotated throughout. No experience needed.",
-    dateTime: "2026-03-22T11:00:00Z",
-    endDateTime: "2026-03-22T13:00:00Z",
-    locationId: "loc-central-park",
-    dateAdded: "2026-03-02T08:30:00Z",
-    lastUpdated: "2026-03-15T09:30:00Z",
-    skillLevel: "Beginner",
-    prerequisites: null,
-    costAmount: 20,
-    costCurrency: "USD",
-    concessionAmount: 12,
-  },
-  {
-    id: "evt-ny-prospect-flow",
-    title: "Prospect Park Flow Session",
-    description:
-      "Intermediate flow practice — washing machines, whips, and pops. Meet at the Long Meadow south entrance.",
-    dateTime: "2026-03-29T10:00:00Z",
-    endDateTime: "2026-03-29T12:30:00Z",
-    locationId: "loc-prospect-park",
-    dateAdded: "2026-03-02T09:00:00Z",
-    lastUpdated: "2026-03-15T10:00:00Z",
-    skillLevel: "Intermediate",
-    prerequisites: "• At least 3 months of regular AcroYoga practice\n• Comfortable in bird and star",
-    costAmount: null,
-    costCurrency: null,
-    concessionAmount: null,
-  },
-  {
-    id: "evt-ny-domino-sunset",
-    title: "Sunset Acro at Domino Park",
-    description:
-      "Evening session with Manhattan skyline views. Standing acro and L-basing. Intermediate level.",
-    dateTime: "2026-04-04T17:30:00Z",
-    endDateTime: "2026-04-04T20:00:00Z",
-    locationId: "loc-domino-park",
-    dateAdded: "2026-03-03T09:30:00Z",
-    lastUpdated: "2026-03-16T18:00:00Z",
-    skillLevel: "Intermediate",
-    prerequisites: null,
-    costAmount: null,
-    costCurrency: null,
-    concessionAmount: null,
-  },
-  {
-    id: "evt-ny-spring-festival",
-    title: "NYC Spring AcroYoga Festival",
-    description:
-      "All-day festival with workshops, jams, and performances. Multiple teachers. All levels welcome!",
-    dateTime: "2026-04-12T10:00:00Z",
-    endDateTime: "2026-04-12T18:00:00Z",
-    locationId: "loc-prospect-park",
-    dateAdded: "2026-03-03T10:00:00Z",
-    lastUpdated: "2026-03-16T12:00:00Z",
-    skillLevel: "All levels",
-    prerequisites: null,
-    costAmount: 45,
-    costCurrency: "USD",
-    concessionAmount: 30,
-  },
-  // ── Bristol events (3) ───────────────────────────────────────────
-  {
-    id: "evt-bristol-castle-jam",
-    title: "Bristol Castle Park Jam",
-    description:
-      "Friendly open jam in Castle Park. All levels, just bring a mat and a smile.",
-    dateTime: "2026-03-16T11:00:00Z",
-    endDateTime: "2026-03-16T14:00:00Z",
-    locationId: "loc-castle-park",
-    dateAdded: "2026-03-03T11:00:00Z",
-    lastUpdated: "2026-03-04T12:00:00Z",
-    recurrenceType: "weekly",
-    recurrenceEndDate: "2026-05-31T23:59:59Z",
-    skillLevel: "All levels",
-    prerequisites: null,
-    costAmount: null,
-    costCurrency: null,
-    concessionAmount: null,
-  },
-  {
-    id: "evt-bristol-motion-workshop",
-    title: "Bristol Intermediate Workshop",
-    description:
-      "Two-hour workshop at The Motion covering intermediate flows, pops, and icarian. Some experience recommended.",
-    dateTime: "2026-03-23T14:00:00Z",
-    endDateTime: "2026-03-23T16:00:00Z",
-    locationId: "loc-the-motion",
-    dateAdded: "2026-03-03T11:30:00Z",
-    lastUpdated: "2026-03-04T12:30:00Z",
-    skillLevel: "Intermediate",
-    prerequisites: "• Able to hold a stable bird as base or flyer\n• Comfortable with basic washing machine",
-    costAmount: 12,
-    costCurrency: "GBP",
-    concessionAmount: 8,
-  },
-  {
-    id: "evt-bristol-spring-jam",
-    title: "Bristol Spring Outdoor Jam",
-    description:
-      "Welcoming the spring sunshine with an outdoor session. Beginners corner available. Bring snacks to share!",
-    dateTime: "2026-04-06T12:00:00Z",
-    endDateTime: "2026-04-06T15:00:00Z",
-    locationId: "loc-castle-park",
-    dateAdded: "2026-03-03T12:00:00Z",
-    lastUpdated: "2026-03-04T13:00:00Z",
-    skillLevel: "All levels",
-    prerequisites: null,
-    costAmount: null,
-    costCurrency: null,
-    concessionAmount: null,
-  },
-  // ── Bournemouth events (2) ───────────────────────────────────────
-  {
-    id: "evt-bournemouth-beach-acro",
-    title: "Boscombe Beach AcroYoga",
-    description:
-      "AcroYoga on the sand! Soft landing guaranteed. All levels. Meet by the pier at 10am.",
-    dateTime: "2026-03-21T10:00:00Z",
-    endDateTime: "2026-03-21T13:00:00Z",
-    locationId: "loc-boscombe-beach",
-    dateAdded: "2026-03-05T11:00:00Z",
-    lastUpdated: "2026-03-06T12:00:00Z",
-    skillLevel: "All levels",
-    prerequisites: null,
-    costAmount: null,
-    costCurrency: null,
-    concessionAmount: null,
-  },
-  {
-    id: "evt-bournemouth-park-session",
-    title: "Shelley Park Sunday Session",
-    description:
-      "Relaxed Sunday practice in Shelley Park. Bring a mat, water, and sunscreen. All abilities welcome.",
-    dateTime: "2026-04-13T11:00:00Z",
-    endDateTime: "2026-04-13T14:00:00Z",
-    locationId: "loc-shelley-park",
-    dateAdded: "2026-03-05T11:30:00Z",
-    lastUpdated: "2026-03-06T12:30:00Z",
-    skillLevel: "All levels",
-    prerequisites: null,
-    costAmount: null,
-    costCurrency: null,
-    concessionAmount: null,
-  },
-];
-
-const insertEvent = sqlite.prepare(
-  "INSERT OR IGNORE INTO events (id, title, description, date_time, end_date_time, location_id, status, created_by, date_added, last_updated, recurrence_type, recurrence_end_date, skill_level, prerequisites, cost_amount, cost_currency, concession_amount, max_attendees) VALUES (?, ?, ?, ?, ?, ?, 'approved', 'user-dan', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-);
-for (const e of seedEvents) {
-  insertEvent.run(
-    e.id,
-    e.title,
-    e.description,
-    e.dateTime,
-    e.endDateTime,
-    e.locationId,
-    e.dateAdded,
-    e.lastUpdated,
-    e.recurrenceType ?? "none",
-    e.recurrenceEndDate ?? null,
-    e.skillLevel ?? "All levels",
-    e.prerequisites ?? null,
-    e.costAmount ?? null,
-    e.costCurrency ?? null,
-    e.concessionAmount ?? null,
-    e.maxAttendees ?? null,
-  );
-}
-
-// ── Seed RSVPs ──────────────────────────────────────────────────────
-const seedRsvps = [
-  { eventId: "evt-sunday-jam", userId: "user-alice", role: "Base", showName: 1, isTeaching: 1 },
-  { eventId: "evt-sunday-jam", userId: "user-bob", role: "Flyer", showName: 1, isTeaching: 0 },
-  { eventId: "evt-sunday-jam", userId: "user-carol", role: "Hybrid", showName: 0, isTeaching: 0 },
-  { eventId: "evt-beginner-workshop", userId: "user-alice", role: "Base", showName: 1, isTeaching: 1 },
-  { eventId: "evt-beginner-workshop", userId: "user-dan", role: "Flyer", showName: 1, isTeaching: 0 },
-  { eventId: "evt-flight-night", userId: "user-bob", role: "Hybrid", showName: 1, isTeaching: 0 },
-  { eventId: "evt-flight-night", userId: "user-carol", role: "Base", showName: 1, isTeaching: 0 },
-  { eventId: "evt-flight-night", userId: "user-dan", role: "Flyer", showName: 0, isTeaching: 0 },
-  { eventId: "evt-washing-machine", userId: "user-alice", role: "Flyer", showName: 1, isTeaching: 0 },
-];
-
-const insertRsvp = sqlite.prepare(
-  "INSERT OR IGNORE INTO rsvps (event_id, user_id, role, show_name, is_teaching, payment_status) VALUES (?, ?, ?, ?, ?, ?)"
-);
-for (const r of seedRsvps) {
-  insertRsvp.run(r.eventId, r.userId, r.role, r.showName, r.isTeaching, null);
-}
-
-console.log("Seed complete: %d users, %d locations, %d events, %d RSVPs", seedUsers.length, seedLocations.length, seedEvents.length, seedRsvps.length);
-sqlite.close();
+seed().catch((err) => {
+  console.error("Seed failed:", err);
+  process.exit(1);
+});

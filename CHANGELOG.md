@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ---
 
+## 2026-03-02
+
+- Add `docker-compose.yml` with named `pgdata` volume; local Postgres now persists across container restarts — no reseed required after `docker compose up`
+- Install `dotenv` (devDep); `drizzle.config.ts` and `seed.ts` now auto-load `.env.local` so `db:migrate` and `db:seed` work without manually prefixing `DATABASE_URL`
+- Add `db:dump` and `db:restore` npm scripts (via `docker exec`) for local backups and data portability
+- Add `AZURE_DATABASE_URL` commented template to `.env.local.example` for manual local→Azure data sync
+- Fix `deploy.yml` CI bug: migration step used `npm ci --omit=dev` which excluded `drizzle-kit`; changed to `npm ci`
+- Add `backup.dump` to `.gitignore`
+
 ## 2026-03-01 (2)
 
 - Event filter pills (New / Full / Past / Booked / To Pay) added above the event list; all filters off shows upcoming only; any filter active uses OR-logic to show matching events; Booked and To Pay pills are hidden when not logged in

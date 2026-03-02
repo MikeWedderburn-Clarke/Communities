@@ -6,3 +6,4 @@ node_modules/
 *.db-wal
 tsconfig.tsbuildinfo
 .env*.local
+backup.dump
