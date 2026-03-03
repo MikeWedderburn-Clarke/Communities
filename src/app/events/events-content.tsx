@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import type { EventSummary } from "@/types";
 import { isEventNew, isEventUpdated } from "@/lib/event-utils";
-import { getEventDay, DAY_ABBR, DAY_PILL_CLS, DAYS_MON_FIRST } from "@/lib/day-utils";
+import { CalendarRangePicker, type DateRange } from "./calendar-range-picker";
 import { buildLocationHierarchy } from "@/lib/location-hierarchy";
 import { normalizeCityName } from "@/lib/city-utils";
 import { EventsHierarchy } from "./events-hierarchy";
@@ -27,10 +27,6 @@ export type DrillState =
 
 type FilterKey = "all" | "new" | "updated" | "full" | "past" | "booked" | "toPay";
 
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 
 interface Props {
   events: EventSummary[];
@@ -71,34 +67,19 @@ export function EventsContent({ events, initialView, homeCity, lastLogin, userId
     setActiveFilter((prev) => (prev === f ? null : f));
   }
 
-  // ── Day-of-week filter state (single-select) ───────────────────────
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  // ── Date range filter ──────────────────────────────────────────────
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
 
-  function toggleDay(d: number) {
-    setSelectedDay((prev) => (prev === d ? null : d));
-  }
-
-  // ── Year/month state ───────────────────────────────────────────────
-  const currentYear = new Date().getFullYear();
-  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
-  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
-
-  // ── Fixed year range: current year ±3 ─────────────────────────────
-  const years = Array.from({ length: 7 }, (_, i) => currentYear - 3 + i);
-
-  // ── Pre-status base: year/month + day filters applied ─────────────
+  // ── Pre-status base: date range filter applied ─────────────────────
   const preStatusBase = useMemo(() => {
-    let base = events.filter((e) => {
+    if (!dateRange) return events;
+    const endOfDay = new Date(dateRange.end);
+    endOfDay.setHours(23, 59, 59, 999);
+    return events.filter((e) => {
       const d = new Date(e.nextOccurrence?.dateTime ?? e.dateTime);
-      if (d.getFullYear() !== selectedYear) return false;
-      if (selectedMonth !== null && d.getMonth() !== selectedMonth) return false;
-      return true;
+      return d >= dateRange.start && d <= endOfDay;
     });
-    if (selectedDay !== null) {
-      base = base.filter((e) => getEventDay(e) === selectedDay);
-    }
-    return base;
-  }, [events, selectedYear, selectedMonth, selectedDay]);
+  }, [events, dateRange]);
 
   // ── Filter counts (per status, from preStatusBase) ─────────────────
   const filterCounts = useMemo(() => ({
@@ -250,70 +231,8 @@ export function EventsContent({ events, initialView, homeCity, lastLogin, userId
           })}
       </div>
 
-      {/* Year filter pills */}
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        {years.map((y) => {
-          const active = selectedYear === y;
-          return (
-            <button
-              key={y}
-              type="button"
-              onClick={() => {
-                setSelectedYear(y);
-                setSelectedMonth(null);
-              }}
-              className={`rounded-full border px-3 py-1 text-sm font-medium transition shadow-sm ${
-                active
-                  ? "bg-indigo-600 text-white border-indigo-600 shadow-inner"
-                  : "border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              {y}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Month filter pills */}
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        {MONTH_NAMES.map((name, m) => {
-          const active = selectedMonth === m;
-          return (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setSelectedMonth((prev) => (prev === m ? null : m))}
-              className={`rounded-full border px-3 py-1 text-sm font-medium transition shadow-sm ${
-                active
-                  ? "bg-indigo-600 text-white border-indigo-600 shadow-inner"
-                  : "border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              {name.slice(0, 3)}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Day-of-week filter pills */}
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        {DAYS_MON_FIRST.map((d) => {
-          const active = selectedDay === d;
-          const cls = DAY_PILL_CLS[d];
-          return (
-            <button
-              key={d}
-              type="button"
-              onClick={() => toggleDay(d)}
-              className={`rounded-full border px-3 py-1 text-sm font-medium transition shadow-sm ${
-                active ? `${cls.on} shadow-inner` : cls.off
-              }`}
-            >
-              {DAY_ABBR[d]}
-            </button>
-          );
-        })}
-      </div>
+      {/* Date range filter */}
+      <CalendarRangePicker range={dateRange} onChange={setDateRange} />
 
       {/* View toggle */}
       <div className="mt-3 flex flex-wrap items-center gap-3">
