@@ -5,7 +5,6 @@ import dynamic from "next/dynamic";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import type { EventSummary } from "@/types";
 import { isEventNew, isEventUpdated } from "@/lib/event-utils";
-import { CalendarRangePicker, type DateRange } from "./calendar-range-picker";
 import { buildLocationHierarchy } from "@/lib/location-hierarchy";
 import { normalizeCityName } from "@/lib/city-utils";
 import { EventsHierarchy } from "./events-hierarchy";
@@ -67,19 +66,8 @@ export function EventsContent({ events, initialView, homeCity, lastLogin, userId
     setActiveFilter((prev) => (prev === f ? null : f));
   }
 
-  // ── Date range filter ──────────────────────────────────────────────
-  const [dateRange, setDateRange] = useState<DateRange | null>(null);
-
-  // ── Pre-status base: date range filter applied ─────────────────────
-  const preStatusBase = useMemo(() => {
-    if (!dateRange) return events;
-    const endOfDay = new Date(dateRange.end);
-    endOfDay.setHours(23, 59, 59, 999);
-    return events.filter((e) => {
-      const d = new Date(e.nextOccurrence?.dateTime ?? e.dateTime);
-      return d >= dateRange.start && d <= endOfDay;
-    });
-  }, [events, dateRange]);
+  // ── Pre-status base: status-only (date filtering is per-view) ──────
+  const preStatusBase = events;
 
   // ── Filter counts (per status, from preStatusBase) ─────────────────
   const filterCounts = useMemo(() => ({
@@ -230,9 +218,6 @@ export function EventsContent({ events, initialView, homeCity, lastLogin, userId
             );
           })}
       </div>
-
-      {/* Date range filter */}
-      <CalendarRangePicker range={dateRange} onChange={setDateRange} />
 
       {/* View toggle */}
       <div className="mt-3 flex flex-wrap items-center gap-3">

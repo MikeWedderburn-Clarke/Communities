@@ -52,9 +52,12 @@ interface Props {
   userLastLogin: string | null;
   drill: DrillState;
   onDrill: (d: DrillState) => void;
+  height?: number | string;
+  /** When true: no outer mt-6 wrapper, no BreadcrumbNav, fills container height */
+  embedded?: boolean;
 }
 
-export function LeafletMap({ events, allEvents, userLastLogin, drill, onDrill }: Props) {
+export function LeafletMap({ events, allEvents, userLastLogin, drill, onDrill, height = 480, embedded = false }: Props) {
   // Derive level/activeContinent/activeCountry/activeCity from shared drill state
   const level: Level =
     drill.level === "globe" ? 1 :
@@ -249,13 +252,13 @@ export function LeafletMap({ events, allEvents, userLastLogin, drill, onDrill }:
   });
 
   if (events.length === 0) {
-    return <p className="mt-6 text-gray-500">No events to show yet.</p>;
+    return <p className={embedded ? "p-4 text-gray-500" : "mt-6 text-gray-500"}>No events to show yet.</p>;
   }
 
   return (
-    <div className="mt-6 space-y-3">
-      <BreadcrumbNav items={breadcrumbItems} />
-      <div className="overflow-hidden rounded-lg border border-gray-200 shadow-sm" style={{ height: 480 }}>
+    <div className={embedded ? "h-full flex flex-col" : "mt-6 space-y-3"}>
+      {!embedded && <BreadcrumbNav items={breadcrumbItems} />}
+      <div className="overflow-hidden rounded-lg border border-gray-200 shadow-sm" style={{ height: embedded ? "100%" : height }}>
         <MapContainer
           center={currentCenter}
           zoom={LEVEL_ZOOM[level]}
