@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ---
 
+## 2026-03-03
+
+- `copilot-instructions.md`: move authentication and CI/CD from "Not yet built" to "Implemented features" (both are complete); add Event Groups, Ticket Types, Bookings, Teacher Revenue Splits, status filter pills, calendar range picker, combined tree+map view, What3Words, and continent hierarchy to implemented features list; remove stale mock-auth note from architecture conventions; fix "in-memory SQLite" to "in-memory PGlite"
+- `README.md`: fix tech stack — `better-sqlite3` incorrectly listed as the PostgreSQL driver; corrected to `pg` (node-postgres)
+
+---
+
 ## 2026-03-02
 
 - Add combined tree+map view: collapsible Country → City hierarchy on the left, synced Leaflet map on the right; clicking either panel zooms/expands the other; expanded city shows all events with role badges, skill level, and cost

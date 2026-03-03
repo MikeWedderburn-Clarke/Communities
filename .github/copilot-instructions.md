@@ -9,7 +9,7 @@ Web app first for iteration; keep architecture open so iOS/Android clients can b
 - **Database:** PostgreSQL via `pg` (node-postgres), managed with Drizzle ORM. Local dev uses Docker Compose (`docker compose up -d`); production uses Azure Database for PostgreSQL.
 - **Styling:** Tailwind CSS v4
 - **Maps:** Leaflet + react-leaflet + react-leaflet-cluster
-- **Testing:** Vitest with in-memory SQLite (helpers in `src/db/test-utils.ts`)
+- **Testing:** Vitest with in-memory PGlite (helpers in `src/db/test-utils.ts`)
 - **TypeScript:** strict mode; `tsc --noEmit` must pass cleanly before every commit
 
 ## Implemented features
@@ -22,23 +22,29 @@ Web app first for iteration; keep architecture open so iOS/Android clients can b
 - Teacher status: users request approval; admins review and approve/deny
 - Admin role: approve/reject pending events; approve/deny teacher requests; see all attendees including hidden-name
 - Recurring events: daily / weekly / monthly with optional end date; `nextOccurrence` computed at query time
-- Map views: interactive Leaflet map (Globe → Country → City drill-down) and hierarchy list view (Globe → Country → City → Venue)
+- Map views: interactive Leaflet map (Globe → Continent → Country → City drill-down), hierarchy list view (Globe → Continent → Country → City → Venue), and combined split tree+map view
 - Home city: profile preference + browser geolocation; events page defaults to home city filter
-- Event freshness badges: "New" / "Updated" shown for events added or changed since the viewer's last login
+- Event freshness badges: "New" / "Updated" shown for events added or changed since the viewer's last login; map bubbles and hierarchy nodes tint blue when child events are fresh
 - External map links on event detail: Google Maps, Apple Maps, OpenStreetMap, What3Names
-- Nominatim geocoding in the Add Location form (search → auto-fill name, city, country, lat/lng)
+- Nominatim geocoding in the Add Location form (search → auto-fill name, city, country, lat/lng); What3Words and directions fields on locations
 - Skill level picker (Beginner / Intermediate / Advanced / All levels) on event creation; colour-coded badge on event detail
 - Prerequisites free-text field on event creation (auto-inserts `• ` bullet on Enter); displayed as amber card on event detail; RSVP form requires attendees to tick a confirmation checkbox
 - Cost and optional concession cost on event creation (amount + currency picker); displayed in RSVP section; `formatCost()` uses `Intl.NumberFormat` for locale-aware currency formatting
+- Status filter pills (New / Full / Past / Booked / To Pay) with OR-logic; colour-coded event cards (orange = past, red = full, blue = new/updated, yellow = to pay, green = booked)
+- Calendar range picker: dual-month date range selection filter on the events page
+- Authentication: NextAuth.js v5 with Microsoft Entra External ID for production; set `MOCK_AUTH=true` in `.env.local` for local dev user-picker (no passwords)
+- CI/CD: GitHub Actions workflow builds Docker image → pushes to Azure Container Registry → runs `db:migrate` → deploys to Azure Container Apps on every push to `main`
+- Event Groups: named containers (type: festival / combo / series) linking multiple events; public group page at `/groups/[id]` shows tickets and member events; admin group management at `/admin/groups`
+- Ticket Types: per-group ticket definitions with cost, capacity, and concession pricing; independent capacity pools per ticket type
+- Bookings: ticket purchase with payment status tracking (pending / paid / concession_paid / comp / refunded)
+- Teacher Revenue Splits: fixed amount per teacher per ticket type; admin teacher earnings report at `/admin/groups/[id]/teacher-report`
 
 ## Not yet built
-- **Real authentication** — currently mock cookie-based (user ID in cookie, no password). TODO in `src/lib/auth.ts` to replace with NextAuth + email magic-link. Do not extend the mock; ask before building auth-dependent features.
 - **Payment processing** — cost/concession fields are stored and displayed, but no payment gateway (Stripe etc.) is integrated; the cost fields are a data foundation for a future payments feature.
 - **Email notifications** — no emails sent for event approvals, RSVP confirmations, or teacher decisions
 - **Rate limiting** — API endpoints have no request throttling
-- **CI/CD** — GitHub Actions workflow (`deploy.yml`) builds the Docker image, pushes to Azure Container Registry, runs `db:migrate` against Azure Postgres, then deploys to Azure Container Apps. Requires secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `DATABASE_URL`; and vars: `AZURE_REGISTRY`, `AZURE_APP_NAME`, `AZURE_RESOURCE_GROUP`.
 - **Image uploads** — events and profiles have no photos; no blob storage configured
-- **Share card generation** — share-by-link works; visual share card does not exist yet
+- **Share card generation** — share-by-link works; dynamic OG image / visual share card does not exist yet
 - **Event series management UI** — recurrence logic and DB fields exist; no UI to edit or cancel a whole series
 
 ## Architecture conventions
@@ -46,7 +52,7 @@ Web app first for iteration; keep architecture open so iOS/Android clients can b
 - Business logic belongs in `src/services/`; API route handlers should only parse input, call a service function, and return a response
 - React Server Components by default; add `"use client"` only when a component needs state, effects, or browser APIs
 - New integration tests should use `createTestDb()` from `src/db/test-utils.ts` for an isolated in-memory database
-- The auth helper is `getCurrentUser()` in `src/lib/auth.ts`; it is currently **mock** — do not extend the mock auth system
+- The auth helper is `getCurrentUser()` in `src/lib/auth.ts`; production uses NextAuth v5 with Microsoft Entra External ID; local dev uses mock user-picker when `MOCK_AUTH=true`
 
 ## Engineering principles
 - Contract-first APIs: define types/schemas centrally in `src/types.ts` to reuse later for mobile clients.

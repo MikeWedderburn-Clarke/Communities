@@ -154,7 +154,7 @@ Any logged-in user can submit an event. Events created by **admins** are automat
 
 - **Next.js 15** (App Router, Server Components)
 - **TypeScript** (strict mode)
-- **PostgreSQL** via `better-sqlite3` + **Drizzle ORM**
+- **PostgreSQL** via `pg` (node-postgres) + **Drizzle ORM**
 - **Tailwind CSS v4**
 - **NextAuth.js v5**
 - **Vitest** (unit + integration tests with in-memory PGlite)
