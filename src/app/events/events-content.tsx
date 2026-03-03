@@ -79,41 +79,21 @@ export function EventsContent({ events, initialView, homeCity, lastLogin, userId
   }
 
   // ── Year/month state ───────────────────────────────────────────────
-  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const currentYear = new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
 
-  // ── Derived years ──────────────────────────────────────────────────
-  const years = useMemo(() => {
-    const s = new Set<number>();
-    for (const e of events) {
-      const d = new Date(e.nextOccurrence?.dateTime ?? e.dateTime);
-      s.add(d.getFullYear());
-    }
-    return Array.from(s).sort();
-  }, [events]);
-
-  // ── Derived months for selected year ──────────────────────────────
-  const months = useMemo(() => {
-    if (selectedYear === null) return [];
-    const s = new Set<number>();
-    for (const e of events) {
-      const d = new Date(e.nextOccurrence?.dateTime ?? e.dateTime);
-      if (d.getFullYear() === selectedYear) s.add(d.getMonth());
-    }
-    return Array.from(s).sort((a, b) => a - b);
-  }, [events, selectedYear]);
+  // ── Fixed year range: current year ±3 ─────────────────────────────
+  const years = Array.from({ length: 7 }, (_, i) => currentYear - 3 + i);
 
   // ── Pre-status base: year/month + day filters applied ─────────────
   const preStatusBase = useMemo(() => {
-    let base = events;
-    if (selectedYear !== null) {
-      base = base.filter((e) => {
-        const d = new Date(e.nextOccurrence?.dateTime ?? e.dateTime);
-        if (d.getFullYear() !== selectedYear) return false;
-        if (selectedMonth !== null && d.getMonth() !== selectedMonth) return false;
-        return true;
-      });
-    }
+    let base = events.filter((e) => {
+      const d = new Date(e.nextOccurrence?.dateTime ?? e.dateTime);
+      if (d.getFullYear() !== selectedYear) return false;
+      if (selectedMonth !== null && d.getMonth() !== selectedMonth) return false;
+      return true;
+    });
     if (selectedDay !== null) {
       base = base.filter((e) => getEventDay(e) === selectedDay);
     }
@@ -270,6 +250,51 @@ export function EventsContent({ events, initialView, homeCity, lastLogin, userId
           })}
       </div>
 
+      {/* Year filter pills */}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {years.map((y) => {
+          const active = selectedYear === y;
+          return (
+            <button
+              key={y}
+              type="button"
+              onClick={() => {
+                setSelectedYear(y);
+                setSelectedMonth(null);
+              }}
+              className={`rounded-full border px-3 py-1 text-sm font-medium transition shadow-sm ${
+                active
+                  ? "bg-indigo-600 text-white border-indigo-600 shadow-inner"
+                  : "border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              {y}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Month filter pills */}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {MONTH_NAMES.map((name, m) => {
+          const active = selectedMonth === m;
+          return (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setSelectedMonth((prev) => (prev === m ? null : m))}
+              className={`rounded-full border px-3 py-1 text-sm font-medium transition shadow-sm ${
+                active
+                  ? "bg-indigo-600 text-white border-indigo-600 shadow-inner"
+                  : "border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              {name.slice(0, 3)}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Day-of-week filter pills */}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {DAYS_MON_FIRST.map((d) => {
@@ -290,7 +315,7 @@ export function EventsContent({ events, initialView, homeCity, lastLogin, userId
         })}
       </div>
 
-      {/* View toggle + year/month filter */}
+      {/* View toggle */}
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <div className="flex gap-2">
           {viewButtons.map((btn) => (
@@ -307,39 +332,6 @@ export function EventsContent({ events, initialView, homeCity, lastLogin, userId
             </button>
           ))}
         </div>
-
-        {years.length > 1 && (
-          <select
-            value={selectedYear ?? ""}
-            onChange={(e) => {
-              const val = e.target.value;
-              setSelectedYear(val === "" ? null : parseInt(val, 10));
-              setSelectedMonth(null);
-            }}
-            className="rounded-full border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-indigo-400 focus:outline-none"
-          >
-            <option value="">All years</option>
-            {years.map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
-        )}
-
-        {selectedYear !== null && months.length > 1 && (
-          <select
-            value={selectedMonth ?? ""}
-            onChange={(e) => {
-              const val = e.target.value;
-              setSelectedMonth(val === "" ? null : parseInt(val, 10));
-            }}
-            className="rounded-full border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-indigo-400 focus:outline-none"
-          >
-            <option value="">All months</option>
-            {months.map((m) => (
-              <option key={m} value={m}>{MONTH_NAMES[m]}</option>
-            ))}
-          </select>
-        )}
       </div>
 
       {view === "list" && (

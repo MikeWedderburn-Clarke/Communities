@@ -39,13 +39,13 @@ export const DAY_CARD_CLS: Record<number, string> = {
 
 /** Active / inactive Tailwind classes for day-filter pills */
 export const DAY_PILL_CLS: Record<number, { on: string; off: string }> = {
-  1: { on: "bg-red-600 text-white border-red-600",       off: "border-red-400 text-red-700 hover:bg-red-50" },
-  2: { on: "bg-amber-600 text-white border-amber-600",   off: "border-amber-400 text-amber-700 hover:bg-amber-50" },
-  3: { on: "bg-green-600 text-white border-green-600",   off: "border-green-400 text-green-700 hover:bg-green-50" },
-  4: { on: "bg-cyan-600 text-white border-cyan-600",     off: "border-cyan-400 text-cyan-700 hover:bg-cyan-50" },
-  5: { on: "bg-blue-600 text-white border-blue-600",     off: "border-blue-400 text-blue-700 hover:bg-blue-50" },
-  6: { on: "bg-violet-600 text-white border-violet-600", off: "border-violet-400 text-violet-700 hover:bg-violet-50" },
-  0: { on: "bg-pink-600 text-white border-pink-600",     off: "border-pink-400 text-pink-700 hover:bg-pink-50" },
+  1: { on: "bg-red-600 text-white border-red-600",       off: "border-red-400 bg-red-100 text-red-700 hover:bg-red-200" },
+  2: { on: "bg-amber-600 text-white border-amber-600",   off: "border-amber-400 bg-amber-100 text-amber-700 hover:bg-amber-200" },
+  3: { on: "bg-green-600 text-white border-green-600",   off: "border-green-400 bg-green-100 text-green-700 hover:bg-green-200" },
+  4: { on: "bg-cyan-600 text-white border-cyan-600",     off: "border-cyan-400 bg-cyan-100 text-cyan-700 hover:bg-cyan-200" },
+  5: { on: "bg-blue-600 text-white border-blue-600",     off: "border-blue-400 bg-blue-100 text-blue-700 hover:bg-blue-200" },
+  6: { on: "bg-violet-600 text-white border-violet-600", off: "border-violet-400 bg-violet-100 text-violet-700 hover:bg-violet-200" },
+  0: { on: "bg-pink-600 text-white border-pink-600",     off: "border-pink-400 bg-pink-100 text-pink-700 hover:bg-pink-200" },
 };
 
 export function getEventDay(event: Pick<EventSummary, "nextOccurrence" | "dateTime">): number {

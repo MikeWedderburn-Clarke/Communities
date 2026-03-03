@@ -22,6 +22,8 @@ const LEVEL_ZOOM: Record<Level, number> = { 1: 2, 2: 4, 3: 6, 4: 12 };
 
 // Zoom thresholds: if user zooms below these, drill up one level
 const ZOOM_DOWN_THRESHOLD: Record<2 | 3 | 4, number> = { 2: 2.5, 3: 4.5, 4: 8 };
+// Zoom thresholds: if user zooms above these, drill into nearest entry
+const ZOOM_UP_THRESHOLD: Record<1 | 2 | 3, number> = { 1: 3, 2: 5, 3: 9 };
 
 interface ContinentEntry {
   continent: string;
@@ -266,7 +268,15 @@ export function LeafletMap({ events, allEvents, userLastLogin, drill, onDrill }:
           zoomControl={false}
         >
           <MapController center={currentCenter} zoom={LEVEL_ZOOM[level]} bounds={currentBounds} />
-          <ZoomWatcher level={level} drill={drill} onDrill={onDrill} countryMap={countryMap} />
+          <ZoomWatcher
+            level={level}
+            drill={drill}
+            onDrill={onDrill}
+            continentEntries={continentEntries}
+            countryEntries={countryEntries}
+            cityEntries={cityEntries}
+            countryMap={countryMap}
+          />
           <TileLayer
             attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
@@ -315,36 +325,55 @@ export function LeafletMap({ events, allEvents, userLastLogin, drill, onDrill }:
   );
 }
 
-// ── Zoom snapping: when user zooms out past threshold, drill up ───────────────
+// ── Zoom snapping: zoom-out drills up; zoom-in drills into nearest entry ──────
 
 interface ZoomWatcherProps {
   level: Level;
   drill: DrillState;
   onDrill: (d: DrillState) => void;
+  continentEntries: ContinentEntry[];
+  countryEntries: CountryEntry[];
+  cityEntries: CityEntry[];
   countryMap: Map<string, { continent: string }>;
 }
 
-function ZoomWatcher({ level, drill, onDrill, countryMap }: ZoomWatcherProps) {
+function ZoomWatcher({ level, drill, onDrill, continentEntries, countryEntries, cityEntries, countryMap }: ZoomWatcherProps) {
   // Keep a ref so the handler can see current props without re-registering
-  const ref = useRef({ level, drill, onDrill, countryMap });
-  useEffect(() => { ref.current = { level, drill, onDrill, countryMap }; });
+  const ref = useRef({ level, drill, onDrill, continentEntries, countryEntries, cityEntries, countryMap });
+  useEffect(() => { ref.current = { level, drill, onDrill, continentEntries, countryEntries, cityEntries, countryMap }; });
 
   useMapEvent("zoomend", (e) => {
     const zoom = e.target.getZoom() as number;
-    const { level: lv, drill: d, onDrill: od, countryMap: cm } = ref.current;
+    const { level: lv, drill: d, onDrill: od, continentEntries: ce, countryEntries: coe, cityEntries: cie, countryMap: cm } = ref.current;
 
+    // ── Zoom-out: drill up ────────────────────────────────────────────
     if (lv === 4 && zoom < ZOOM_DOWN_THRESHOLD[4]) {
-      // city → country
       if ("country" in d) od({ level: "country", country: d.country });
     } else if (lv === 3 && zoom < ZOOM_DOWN_THRESHOLD[3]) {
-      // country → continent
       const country = "country" in d ? d.country : null;
       const continent = country ? (cm.get(country)?.continent ?? null) : null;
       if (continent) od({ level: "continent", continent });
       else od({ level: "globe" });
     } else if (lv === 2 && zoom < ZOOM_DOWN_THRESHOLD[2]) {
-      // continent → globe
       od({ level: "globe" });
+
+    // ── Zoom-in: drill into nearest entry to map centre ───────────────
+    } else if (lv === 1 && zoom >= ZOOM_UP_THRESHOLD[1]) {
+      const center = e.target.getCenter();
+      const nearest = nearestEntry(ce, center);
+      if (nearest) od({ level: "continent", continent: nearest.continent });
+    } else if (lv === 2 && zoom >= ZOOM_UP_THRESHOLD[2]) {
+      const center = e.target.getCenter();
+      const continent = d.level === "continent" ? d.continent : null;
+      const filtered = continent ? coe.filter((c) => c.continent === continent) : coe;
+      const nearest = nearestEntry(filtered, center);
+      if (nearest) od({ level: "country", country: nearest.country });
+    } else if (lv === 3 && zoom >= ZOOM_UP_THRESHOLD[3]) {
+      const center = e.target.getCenter();
+      const country = "country" in d ? d.country : null;
+      const filtered = country ? cie.filter((c) => c.country === country) : cie;
+      const nearest = nearestEntry(filtered, center);
+      if (nearest) od({ level: "city", country: nearest.country, city: nearest.city });
     }
   });
 
@@ -378,6 +407,16 @@ function MapController({ center, bounds, zoom }: { center: [number, number]; bou
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Returns the entry whose centre is closest to the given Leaflet LatLng. */
+function nearestEntry<T extends { center: [number, number] }>(entries: T[], latlng: { lat: number; lng: number }): T | null {
+  if (entries.length === 0) return null;
+  return entries.reduce((best, e) => {
+    const d = (e.center[0] - latlng.lat) ** 2 + (e.center[1] - latlng.lng) ** 2;
+    const bd = (best.center[0] - latlng.lat) ** 2 + (best.center[1] - latlng.lng) ** 2;
+    return d < bd ? e : best;
+  });
+}
 
 function centroid(pts: { lat: number; lng: number }[]): [number, number] {
   if (pts.length === 0) return [20, 0];
