@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import type { EventSummary } from "@/types";
-import { isEventNew, isEventUpdated } from "@/lib/event-utils";
+import { isEventNew, isEventUpdated, hasOccurrenceInRange } from "@/lib/event-utils";
+import { type DateRange } from "./event-calendar";
 import { buildLocationHierarchy } from "@/lib/location-hierarchy";
 import { normalizeCityName } from "@/lib/city-utils";
 import { EventsHierarchy } from "./events-hierarchy";
@@ -66,8 +67,14 @@ export function EventsContent({ events, initialView, homeCity, lastLogin, userId
     setActiveFilter((prev) => (prev === f ? null : f));
   }
 
-  // ── Pre-status base: status-only (date filtering is per-view) ──────
-  const preStatusBase = events;
+  // ── Date range filter ──────────────────────────────────────────────
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+
+  // ── Pre-status base: date-range filtered (drives all counts + views) ──
+  const preStatusBase = useMemo(() => {
+    if (!dateRange) return events;
+    return events.filter((e) => hasOccurrenceInRange(e, dateRange.start, dateRange.end));
+  }, [events, dateRange]);
 
   // ── Filter counts (per status, from preStatusBase) ─────────────────
   const filterCounts = useMemo(() => ({
@@ -261,6 +268,8 @@ export function EventsContent({ events, initialView, homeCity, lastLogin, userId
           allEvents={events}
           lastLogin={lastLogin}
           homeCity={homeCity}
+          dateRange={dateRange}
+          onDateRangeChange={setDateRange}
         />
       )}
     </>

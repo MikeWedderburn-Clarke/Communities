@@ -8,7 +8,7 @@ import { DAY_HEX, getEventDay } from "@/lib/day-utils";
 import { buildLocationHierarchy, getContinent } from "@/lib/location-hierarchy";
 import { isEventNew, isEventUpdated } from "@/lib/event-utils";
 import { RoleBadges } from "@/components/role-badges";
-import { EventCalendar } from "./event-calendar";
+import { EventCalendar, type DateRange } from "./event-calendar";
 import type { EventSummary } from "@/types";
 import type { DrillState } from "./events-content";
 
@@ -29,6 +29,8 @@ interface Props {
   allEvents: EventSummary[];
   lastLogin: string | null;
   homeCity: string | null;
+  dateRange: DateRange | null;
+  onDateRangeChange: (r: DateRange | null) => void;
 }
 
 function computeInitialExpansion(
@@ -156,7 +158,7 @@ function EventRow({ event, lastLogin }: EventRowProps) {
 
 // ── Main combined view ────────────────────────────────────────────────────────
 
-export function EventsCombined({ events, allEvents, lastLogin, homeCity }: Props) {
+export function EventsCombined({ events, allEvents, lastLogin, homeCity, dateRange, onDateRangeChange }: Props) {
   // Compute initial expansion from homeCity (only on first render)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const initial = useMemo(() => computeInitialExpansion(events, homeCity), []);
@@ -165,21 +167,8 @@ export function EventsCombined({ events, allEvents, lastLogin, homeCity }: Props
   const [expandedCountry, setExpandedCountry] = useState<string | null>(initial.country);
   const [expandedCity, setExpandedCity] = useState<string | null>(initial.city);
 
-  // ── Date filter (driven by the EventCalendar above the map) ───────
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-
-  const displayEvents = selectedDate
-    ? events.filter((e) => {
-        const dt = new Date(e.nextOccurrence?.dateTime ?? e.dateTime);
-        return (
-          dt.getFullYear() === selectedDate.getFullYear() &&
-          dt.getMonth() === selectedDate.getMonth() &&
-          dt.getDate() === selectedDate.getDate()
-        );
-      })
-    : events;
-
-  const hierarchy = useMemo(() => buildLocationHierarchy(displayEvents), [displayEvents]);
+  // events prop is already date+status filtered (from events-content)
+  const hierarchy = useMemo(() => buildLocationHierarchy(events), [events]);
   const drill: DrillState = useMemo(() => {
     if (expandedCity && expandedCountry) {
       return { level: "city", country: expandedCountry, city: expandedCity };
@@ -360,13 +349,13 @@ export function EventsCombined({ events, allEvents, lastLogin, homeCity }: Props
       {/* ── Right: calendar + Leaflet map ───────────────────────── */}
       <div className="flex-1 min-w-0 flex flex-col">
         <EventCalendar
-          events={events}
-          selectedDate={selectedDate}
-          onSelectDate={setSelectedDate}
+          events={allEvents}
+          dateRange={dateRange}
+          onDateRangeChange={onDateRangeChange}
         />
         <div className="flex-1 min-h-0">
           <LeafletMap
-            events={displayEvents}
+            events={events}
             allEvents={allEvents}
             userLastLogin={lastLogin}
             drill={drill}
