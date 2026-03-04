@@ -7,7 +7,7 @@ export interface ValidationError {
 
 export function validateRsvpInput(body: unknown): {
   valid: true;
-  data: { eventId: string; role: Role; showName: boolean; isTeaching: boolean };
+  data: { eventId: string; role: Role; showName: boolean; isTeaching: boolean; occurrenceDate: string | null };
 } | {
   valid: false;
   errors: ValidationError[];
@@ -36,6 +36,15 @@ export function validateRsvpInput(body: unknown): {
     errors.push({ field: "isTeaching", message: "isTeaching must be a boolean" });
   }
 
+  let occurrenceDate: string | null = null;
+  if (obj.occurrenceDate !== undefined && obj.occurrenceDate !== null) {
+    if (typeof obj.occurrenceDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(obj.occurrenceDate)) {
+      errors.push({ field: "occurrenceDate", message: "occurrenceDate must be a YYYY-MM-DD date string" });
+    } else {
+      occurrenceDate = obj.occurrenceDate;
+    }
+  }
+
   if (errors.length > 0) {
     return { valid: false, errors };
   }
@@ -47,6 +56,7 @@ export function validateRsvpInput(body: unknown): {
       role: obj.role as Role,
       showName: obj.showName as boolean,
       isTeaching: (obj.isTeaching as boolean) ?? false,
+      occurrenceDate,
     },
   };
 }

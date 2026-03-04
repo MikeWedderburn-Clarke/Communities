@@ -10,7 +10,7 @@ describe("validateRsvpInput", () => {
     });
     expect(result.valid).toBe(true);
     if (result.valid) {
-      expect(result.data).toEqual({ eventId: "evt-1", role: "Base", showName: true, isTeaching: false });
+      expect(result.data).toEqual({ eventId: "evt-1", role: "Base", showName: true, isTeaching: false, occurrenceDate: null });
     }
   });
 
@@ -23,7 +23,7 @@ describe("validateRsvpInput", () => {
     });
     expect(result.valid).toBe(true);
     if (result.valid) {
-      expect(result.data).toEqual({ eventId: "evt-1", role: "Flyer", showName: false, isTeaching: true });
+      expect(result.data).toEqual({ eventId: "evt-1", role: "Flyer", showName: false, isTeaching: true, occurrenceDate: null });
     }
   });
 

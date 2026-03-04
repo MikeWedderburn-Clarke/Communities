@@ -74,9 +74,11 @@ export async function createTestDb(): Promise<Db> {
       role TEXT NOT NULL CHECK(role IN ('Base','Flyer','Hybrid')),
       show_name BOOLEAN NOT NULL DEFAULT false,
       is_teaching BOOLEAN NOT NULL DEFAULT false,
-      payment_status TEXT
+      payment_status TEXT,
+      occurrence_date TEXT
     );
-    CREATE UNIQUE INDEX rsvps_event_user_unique ON rsvps(event_id, user_id);
+    CREATE UNIQUE INDEX rsvps_no_occurrence_unique ON rsvps(event_id, user_id) WHERE occurrence_date IS NULL;
+    CREATE UNIQUE INDEX rsvps_occurrence_unique ON rsvps(event_id, user_id, occurrence_date) WHERE occurrence_date IS NOT NULL;
     CREATE INDEX events_status_datetime_idx ON events(status, date_time);
     CREATE TABLE event_groups (
       id TEXT PRIMARY KEY,

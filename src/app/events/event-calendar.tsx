@@ -58,9 +58,11 @@ export function EventCalendar({ events, dateRange, onDateRangeChange }: Props) {
   const [year, setYear]  = useState(() => dateRange?.start.getFullYear() ?? currentYear);
   const [month, setMonth] = useState(() => dateRange?.start.getMonth() ?? today.getMonth());
 
-  // Two-phase range picking
-  const [pendingStart, setPendingStart] = useState<Date | null>(null);
-  const [hoverDate, setHoverDate]       = useState<Date | null>(null);
+  // Anchor for shift+click range extension
+  const [anchorDate, setAnchorDate] = useState<Date | null>(null);
+  // Drag state
+  const [isDragging, setIsDragging] = useState(false);
+  const [hoverDate, setHoverDate]   = useState<Date | null>(null);
 
   const years = useMemo(
     () => Array.from({ length: 7 }, (_, i) => currentYear - 3 + i),
@@ -80,54 +82,113 @@ export function EventCalendar({ events, dateRange, onDateRangeChange }: Props) {
 
   const cells = useMemo(() => buildDays(year, month), [year, month]);
 
-  // Preview: active hover range (while picking) or committed range
-  const preview: DateRange | null =
-    pendingStart && hoverDate
+  // Preview: live drag range or committed range
+  const dragPreview: DateRange | null =
+    isDragging && anchorDate && hoverDate
       ? {
-          start: pendingStart <= hoverDate ? pendingStart : hoverDate,
-          end:   pendingStart <= hoverDate ? hoverDate   : pendingStart,
+          start: anchorDate <= hoverDate ? anchorDate : hoverDate,
+          end:   anchorDate <= hoverDate ? hoverDate   : anchorDate,
         }
-      : dateRange;
+      : null;
 
-  function handleDayClick(day: Date) {
-    if (!pendingStart) {
-      setPendingStart(day);
-    } else {
-      const start = pendingStart <= day ? pendingStart : day;
-      const end   = pendingStart <= day ? day           : pendingStart;
-      onDateRangeChange({ start, end });
-      setPendingStart(null);
-      setHoverDate(null);
+  const preview: DateRange | null = dragPreview ?? dateRange;
+
+  // ── Year / month navigation — clears selection ─────────────────────────────
+
+  function handleYearChange(y: number) {
+    setYear(y);
+    onDateRangeChange(null);
+    setAnchorDate(null);
+    setHoverDate(null);
+    setIsDragging(false);
+  }
+
+  function handleMonthChange(m: number) {
+    setMonth(m);
+    onDateRangeChange(null);
+    setAnchorDate(null);
+    setHoverDate(null);
+    setIsDragging(false);
+  }
+
+  // ── Day interaction ────────────────────────────────────────────────────────
+
+  function handleDayMouseDown(day: Date, e: React.MouseEvent) {
+    e.preventDefault(); // prevent text selection during drag
+    if (e.shiftKey) {
+      // Shift+click: extend range from current anchor
+      if (anchorDate) {
+        const start = anchorDate <= day ? anchorDate : day;
+        const end   = anchorDate <= day ? day         : anchorDate;
+        onDateRangeChange({ start, end });
+      } else {
+        setAnchorDate(day);
+        onDateRangeChange({ start: day, end: day });
+      }
+      return;
     }
+    // Start drag / potential single-click
+    setIsDragging(true);
+    setAnchorDate(day);
+    setHoverDate(day);
+  }
+
+  function handleDayMouseEnter(day: Date) {
+    if (isDragging) setHoverDate(day);
+  }
+
+  // Commit selection on mouse-up anywhere in the calendar container
+  function handleContainerMouseUp() {
+    if (!isDragging || !anchorDate) return;
+    setIsDragging(false);
+    const end = hoverDate ?? anchorDate;
+    const start = anchorDate <= end ? anchorDate : end;
+    const endDate = anchorDate <= end ? end : anchorDate;
+    // Toggle: clicking the already-selected single day deselects it
+    if (
+      isSameDay(start, endDate) &&
+      dateRange &&
+      isSameDay(dateRange.start, dateRange.end) &&
+      isSameDay(start, dateRange.start)
+    ) {
+      onDateRangeChange(null);
+      setAnchorDate(null);
+    } else {
+      onDateRangeChange({ start, end: endDate });
+    }
+    setHoverDate(null);
   }
 
   function handleClear() {
     onDateRangeChange(null);
-    setPendingStart(null);
+    setAnchorDate(null);
     setHoverDate(null);
+    setIsDragging(false);
   }
 
   const todayKey = toKey(today);
 
   // Footer
   let footerText: string;
-  if (pendingStart && !hoverDate) {
-    footerText = `From ${pendingStart.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} — click end date`;
-  } else if (pendingStart && hoverDate && preview) {
-    footerText = `${preview.start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} → ${preview.end.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
+  if (isDragging && dragPreview) {
+    const s = dragPreview.start.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    const e = dragPreview.end.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    footerText = isSameDay(dragPreview.start, dragPreview.end) ? s : `${s} → ${e}`;
   } else if (dateRange) {
     const sameYear = dateRange.start.getFullYear() === dateRange.end.getFullYear();
     const s = dateRange.start.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: sameYear ? undefined : "numeric" });
     const e = dateRange.end.toLocaleDateString("en-GB",   { day: "numeric", month: "short", year: "numeric" });
     footerText = isSameDay(dateRange.start, dateRange.end) ? s : `${s} – ${e}`;
   } else {
-    footerText = "Click a day to start range";
+    footerText = "Click · Shift+click to extend · drag for range";
   }
 
   return (
     <div
       className="flex-shrink-0 border-b border-gray-100 bg-white px-3 pt-2 pb-1.5"
       style={{ userSelect: "none" }}
+      onMouseUp={handleContainerMouseUp}
+      onMouseLeave={handleContainerMouseUp}
     >
       {/* Year pills */}
       <div className="flex items-center gap-1 flex-wrap mb-1">
@@ -135,7 +196,7 @@ export function EventCalendar({ events, dateRange, onDateRangeChange }: Props) {
           <button
             key={y}
             type="button"
-            onClick={() => setYear(y)}
+            onClick={() => handleYearChange(y)}
             className={`rounded-full border px-2 py-0.5 text-xs font-medium transition ${
               year === y
                 ? "bg-indigo-600 text-white border-indigo-600"
@@ -153,7 +214,7 @@ export function EventCalendar({ events, dateRange, onDateRangeChange }: Props) {
           <button
             key={m}
             type="button"
-            onClick={() => setMonth(m)}
+            onClick={() => handleMonthChange(m)}
             className={`rounded-full border px-2 py-0.5 text-xs font-medium transition ${
               month === m
                 ? "bg-indigo-600 text-white border-indigo-600"
@@ -195,8 +256,6 @@ export function EventCalendar({ events, dateRange, onDateRangeChange }: Props) {
             isStart = isSameDay(day, preview.start);
             isEnd   = isSameDay(day, preview.end);
             inRange = !isStart && !isEnd && day > preview.start && day < preview.end;
-          } else if (pendingStart && isSameDay(day, pendingStart)) {
-            isStart = true;
           }
 
           let bg: string;
@@ -225,9 +284,8 @@ export function EventCalendar({ events, dateRange, onDateRangeChange }: Props) {
             >
               <button
                 type="button"
-                onClick={() => handleDayClick(day)}
-                onMouseEnter={() => { if (pendingStart) setHoverDate(day); }}
-                onMouseLeave={() => setHoverDate(null)}
+                onMouseDown={(e) => handleDayMouseDown(day, e)}
+                onMouseEnter={() => handleDayMouseEnter(day)}
                 className={`relative z-10 w-full text-center text-xs py-0.5 rounded transition ${
                   isToday ? "ring-1 ring-inset ring-gray-400" : ""
                 } ${
@@ -246,10 +304,10 @@ export function EventCalendar({ events, dateRange, onDateRangeChange }: Props) {
 
       {/* Footer status + clear */}
       <div className="mt-1 flex items-center justify-between text-xs">
-        <span className={pendingStart ? "text-indigo-600 font-medium" : "text-gray-400"}>
+        <span className={isDragging ? "text-indigo-600 font-medium" : "text-gray-400"}>
           {footerText}
         </span>
-        {(dateRange || pendingStart) && (
+        {dateRange && (
           <button
             type="button"
             onClick={handleClear}

@@ -8,6 +8,7 @@ import { formatCost } from "@/lib/format-cost";
 
 interface Props {
   eventId: string;
+  occurrenceDate: string | null;
   currentRsvp: { role: Role; showName: boolean; isTeaching: boolean } | null;
   isTeacherApproved: boolean;
   defaultRole: Role | null;
@@ -18,7 +19,7 @@ interface Props {
   concessionAmount: number | null;
 }
 
-export function RsvpForm({ eventId, currentRsvp, isTeacherApproved, defaultRole, defaultShowName, prerequisites, costAmount, costCurrency, concessionAmount }: Props) {
+export function RsvpForm({ eventId, occurrenceDate, currentRsvp, isTeacherApproved, defaultRole, defaultShowName, prerequisites, costAmount, costCurrency, concessionAmount }: Props) {
   const router = useRouter();
   const [role, setRole] = useState<Role>(currentRsvp?.role ?? defaultRole ?? "Base");
   const [showName, setShowName] = useState(currentRsvp?.showName ?? defaultShowName ?? true);
@@ -41,7 +42,7 @@ export function RsvpForm({ eventId, currentRsvp, isTeacherApproved, defaultRole,
     const res = await fetch("/api/rsvp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ eventId, role, showName, isTeaching }),
+      body: JSON.stringify({ eventId, role, showName, isTeaching, occurrenceDate }),
     });
 
     if (!res.ok) {
@@ -62,7 +63,7 @@ export function RsvpForm({ eventId, currentRsvp, isTeacherApproved, defaultRole,
     const res = await fetch("/api/rsvp", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ eventId }),
+      body: JSON.stringify({ eventId, occurrenceDate }),
     });
 
     if (!res.ok) {

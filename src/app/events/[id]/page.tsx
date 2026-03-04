@@ -52,6 +52,8 @@ export default async function EventDetailPage({
   const freshSinceLogin = isEventNew(event, user?.freshSince ?? null);
   const upcoming = event.nextOccurrence ?? { dateTime: event.dateTime, endDateTime: event.endDateTime };
   const recurrenceSummary = formatRecurrenceSummary(event.recurrence);
+  // For recurring events, RSVP is scoped to the specific upcoming occurrence
+  const occurrenceDate = event.recurrence ? upcoming.dateTime.substring(0, 10) : null;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
@@ -249,6 +251,7 @@ export default async function EventDetailPage({
                   </h2>
                   <RsvpForm
                     eventId={event.id}
+                    occurrenceDate={occurrenceDate}
                     currentRsvp={event.currentUserRsvp}
                     isTeacherApproved={user?.isTeacherApproved ?? false}
                     defaultRole={user?.defaultRole ?? null}

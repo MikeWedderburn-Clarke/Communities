@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Validation failed", details: result.errors }, { status: 400 });
   }
 
-  const { eventId, role, showName, isTeaching } = result.data;
+  const { eventId, role, showName, isTeaching, occurrenceDate } = result.data;
 
   // Verify event exists
   const event = await getEventById(db, eventId);
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "You must be an approved teacher to mark as teaching" }, { status: 403 });
   }
 
-  await createOrUpdateRsvp(db, user.id, eventId, role, showName, isTeaching);
+  await createOrUpdateRsvp(db, user.id, eventId, role, showName, isTeaching, occurrenceDate);
 
   return NextResponse.json({ ok: true });
 }
@@ -57,8 +57,10 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "eventId is required" }, { status: 400 });
   }
 
-  const eventId = (body as Record<string, string>).eventId;
-  const deleted = await deleteRsvp(db, user.id, eventId);
+  const b = body as Record<string, unknown>;
+  const eventId = b.eventId as string;
+  const occurrenceDate = typeof b.occurrenceDate === "string" ? b.occurrenceDate : null;
+  const deleted = await deleteRsvp(db, user.id, eventId, occurrenceDate);
 
   if (!deleted) {
     return NextResponse.json({ error: "RSVP not found" }, { status: 404 });

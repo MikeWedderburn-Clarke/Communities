@@ -1,4 +1,4 @@
-import { eq, and, isNotNull } from "drizzle-orm";
+import { eq, and, isNotNull, isNull, sql } from "drizzle-orm";
 import type { Db } from "@/db";
 import * as schema from "@/db/schema";
 import { computeNextOccurrence } from "@/lib/recurrence";
@@ -91,6 +91,7 @@ type EventListRow = {
   maxAttendees: number | null;
   rsvpRole: string | null;
   rsvpIsTeaching: boolean | null;
+  rsvpOccurrenceDate: string | null;
 };
 
 /**
@@ -124,6 +125,7 @@ function groupEventRows(rows: EventListRow[]): EventSummary[] {
         attendeeCount: 0,
         roleCounts: { Base: 0, Flyer: 0, Hybrid: 0 },
         teacherCount: 0,
+        occurrenceAttendance: null,
         dateAdded: row.dateAdded,
         lastUpdated: row.lastUpdated,
         skillLevel: row.skillLevel as SkillLevel,
@@ -150,6 +152,16 @@ function groupEventRows(rows: EventListRow[]): EventSummary[] {
       }
       if (row.rsvpIsTeaching) summary.teacherCount++;
       summary.isFull = summary.maxAttendees !== null && summary.attendeeCount >= summary.maxAttendees;
+      // Per-occurrence bucketing
+      if (row.rsvpOccurrenceDate) {
+        if (!summary.occurrenceAttendance) summary.occurrenceAttendance = {};
+        const key = row.rsvpOccurrenceDate;
+        const occ = summary.occurrenceAttendance[key] ?? { attendeeCount: 0, roleCounts: { Base: 0, Flyer: 0, Hybrid: 0 }, teacherCount: 0 };
+        occ.attendeeCount++;
+        if (row.rsvpRole in occ.roleCounts) occ.roleCounts[row.rsvpRole as Role]++;
+        if (row.rsvpIsTeaching) occ.teacherCount++;
+        summary.occurrenceAttendance[key] = occ;
+      }
     }
   }
   return Array.from(map.values());
@@ -200,6 +212,7 @@ const EVENT_LIST_SELECT = (s: typeof schema) => ({
   maxAttendees: s.events.maxAttendees,
   rsvpRole: s.rsvps.role,
   rsvpIsTeaching: s.rsvps.isTeaching,
+  rsvpOccurrenceDate: s.rsvps.occurrenceDate,
 });
 
 export async function getUpcomingEvents(db: Db): Promise<EventSummary[]> {
@@ -330,6 +343,7 @@ export async function getEventDetail(
     attendeeCount: rsvpRows.length,
     roleCounts,
     teacherCount: rsvpRows.filter((r) => r.isTeaching).length,
+    occurrenceAttendance: null,
     visibleAttendees: visible,
     currentUserRsvp,
     skillLevel: eventRow.skillLevel as SkillLevel,
@@ -356,28 +370,42 @@ export async function createOrUpdateRsvp(
   eventId: string,
   role: Role,
   showName: boolean,
-  isTeaching: boolean = false
+  isTeaching: boolean = false,
+  occurrenceDate: string | null = null
 ): Promise<void> {
-  // Single upsert instead of SELECT + INSERT/UPDATE
-  await db
-    .insert(schema.rsvps)
-    .values({ eventId, userId, role, showName, isTeaching })
-    .onConflictDoUpdate({
-      target: [schema.rsvps.eventId, schema.rsvps.userId],
-      set: { role, showName, isTeaching },
-    });
+  if (occurrenceDate === null) {
+    await db
+      .insert(schema.rsvps)
+      .values({ eventId, userId, role, showName, isTeaching, occurrenceDate: null })
+      .onConflictDoUpdate({
+        target: [schema.rsvps.eventId, schema.rsvps.userId],
+        targetWhere: sql`${schema.rsvps.occurrenceDate} IS NULL`,
+        set: { role, showName, isTeaching },
+      });
+  } else {
+    await db
+      .insert(schema.rsvps)
+      .values({ eventId, userId, role, showName, isTeaching, occurrenceDate })
+      .onConflictDoUpdate({
+        target: [schema.rsvps.eventId, schema.rsvps.userId, schema.rsvps.occurrenceDate],
+        targetWhere: sql`${schema.rsvps.occurrenceDate} IS NOT NULL`,
+        set: { role, showName, isTeaching },
+      });
+  }
 }
 
 export async function deleteRsvp(
   db: Db,
   userId: string,
-  eventId: string
+  eventId: string,
+  occurrenceDate: string | null = null
 ): Promise<boolean> {
+  const condition = occurrenceDate === null
+    ? and(eq(schema.rsvps.eventId, eventId), eq(schema.rsvps.userId, userId), isNull(schema.rsvps.occurrenceDate))
+    : and(eq(schema.rsvps.eventId, eventId), eq(schema.rsvps.userId, userId), eq(schema.rsvps.occurrenceDate, occurrenceDate));
   const rows = await db
     .delete(schema.rsvps)
-    .where(
-      and(eq(schema.rsvps.eventId, eventId), eq(schema.rsvps.userId, userId))
-    )
+    .where(condition)
     .returning({ id: schema.rsvps.id });
   return rows.length > 0;
 }
@@ -394,7 +422,8 @@ export async function getEventById(
   return event ?? null;
 }
 
-/** Returns a map of eventId → {role, paymentStatus} for a specific user's RSVPs. */
+/** Returns a map of eventId → {role, paymentStatus} for a specific user's RSVPs.
+ *  Null-occurrence RSVPs (standing/non-recurring) take priority when multiple exist for an event. */
 export async function getUserRsvpMap(
   db: Db,
   userId: string
@@ -402,14 +431,20 @@ export async function getUserRsvpMap(
   const rows = await db
     .select({
       eventId: schema.rsvps.eventId,
+      occurrenceDate: schema.rsvps.occurrenceDate,
       role: schema.rsvps.role,
       paymentStatus: schema.rsvps.paymentStatus,
     })
     .from(schema.rsvps)
     .where(eq(schema.rsvps.userId, userId));
-  return Object.fromEntries(
-    rows.map((r) => [r.eventId, { role: r.role as Role, paymentStatus: r.paymentStatus ?? null }])
-  );
+  const map: Record<string, { role: Role; paymentStatus: string | null }> = {};
+  for (const r of rows) {
+    // Null-occurrence (standing) RSVPs take priority; don't overwrite with a per-occurrence one.
+    if (!map[r.eventId] || r.occurrenceDate === null) {
+      map[r.eventId] = { role: r.role as Role, paymentStatus: r.paymentStatus ?? null };
+    }
+  }
+  return map;
 }
 
 // ── Teacher request/approval ───────────────────────────────────────

@@ -2,8 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
-import { normalizeCityName } from "@/lib/city-utils";
+import { useMemo, type ReactNode } from "react";
 import { DAY_HEX, getEventDay } from "@/lib/day-utils";
 import { buildLocationHierarchy, getContinent } from "@/lib/location-hierarchy";
 import { isEventNew, isEventUpdated } from "@/lib/event-utils";
@@ -28,31 +27,13 @@ interface Props {
   events: EventSummary[];
   allEvents: EventSummary[];
   lastLogin: string | null;
-  homeCity: string | null;
+  drill: DrillState;
+  onDrill: (d: DrillState) => void;
   dateRange: DateRange | null;
   onDateRangeChange: (r: DateRange | null) => void;
 }
 
-function computeInitialExpansion(
-  events: EventSummary[],
-  homeCity: string | null,
-): { continent: string | null; country: string | null; city: string | null } {
-  if (!homeCity) return { continent: null, country: null, city: null };
-  const normalized = normalizeCityName(homeCity) ?? homeCity;
-  const hierarchy = buildLocationHierarchy(events);
-  for (const continentGroup of hierarchy) {
-    for (const co of continentGroup.countries) {
-      const city = co.cities.find((ci) => ci.city === normalized);
-      if (city) return { continent: continentGroup.continent, country: co.country, city: city.city };
-    }
-  }
-  return { continent: null, country: null, city: null };
-}
-
 // ── Shared tree UI primitives ─────────────────────────────────────────────────
-
-// All rows in the tree use the same Chevron component and the same text-sm font.
-// Indentation: +pl-4 per depth level (l0=pl-2, l1=pl-6, l2=pl-10, events=pl-14).
 
 function Chevron({ expanded }: { expanded: boolean }) {
   return (
@@ -93,9 +74,10 @@ function StatusBadge({ cls, children }: { cls: string; children: ReactNode }) {
 interface EventRowProps {
   event: EventSummary;
   lastLogin: string | null;
+  dateRange: DateRange | null;
 }
 
-function EventRow({ event, lastLogin }: EventRowProps) {
+function EventRow({ event, lastLogin, dateRange }: EventRowProps) {
   const day = getEventDay(event);
   const borderColor = DAY_HEX[day];
   const upcoming = event.nextOccurrence ?? { dateTime: event.dateTime };
@@ -108,6 +90,31 @@ function EventRow({ event, lastLogin }: EventRowProps) {
 
   const eventIsNew = isEventNew(event, lastLogin);
   const eventIsUpdated = isEventUpdated(event, lastLogin);
+
+  // If a date range is active, look up per-occurrence counts
+  const occCounts = (() => {
+    if (!dateRange || !event.occurrenceAttendance) return null;
+    const startStr = `${dateRange.start.getFullYear()}-${String(dateRange.start.getMonth() + 1).padStart(2, "0")}-${String(dateRange.start.getDate()).padStart(2, "0")}`;
+    const endStr   = `${dateRange.end.getFullYear()}-${String(dateRange.end.getMonth() + 1).padStart(2, "0")}-${String(dateRange.end.getDate()).padStart(2, "0")}`;
+    const keys = Object.keys(event.occurrenceAttendance).filter((k) => k >= startStr && k <= endStr);
+    if (keys.length === 0) return null;
+    let attendeeCount = 0;
+    const roleCounts = { Base: 0, Flyer: 0, Hybrid: 0 };
+    let teacherCount = 0;
+    for (const k of keys) {
+      const o = event.occurrenceAttendance[k];
+      attendeeCount += o.attendeeCount;
+      roleCounts.Base += o.roleCounts.Base;
+      roleCounts.Flyer += o.roleCounts.Flyer;
+      roleCounts.Hybrid += o.roleCounts.Hybrid;
+      teacherCount += o.teacherCount;
+    }
+    return { attendeeCount, roleCounts, teacherCount };
+  })();
+
+  const displayAttendeeCount = occCounts?.attendeeCount ?? event.attendeeCount;
+  const displayRoleCounts = occCounts?.roleCounts ?? event.roleCounts;
+  const displayTeacherCount = occCounts?.teacherCount ?? event.teacherCount;
 
   return (
     <div
@@ -138,9 +145,9 @@ function EventRow({ event, lastLogin }: EventRowProps) {
         {event.isPast ? "Last: " : ""}{dateStr} · {event.location.name}
       </p>
 
-      {/* Role badges + skill level + cost */}
+      {/* Role badges + skill level + cost + attendee count */}
       <div className="mt-1.5 flex flex-wrap items-center gap-2">
-        <RoleBadges roleCounts={event.roleCounts} teacherCount={event.teacherCount} />
+        <RoleBadges roleCounts={displayRoleCounts} teacherCount={displayTeacherCount} />
         {event.skillLevel && event.skillLevel !== "All levels" && (
           <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
             {event.skillLevel}
@@ -151,6 +158,13 @@ function EventRow({ event, lastLogin }: EventRowProps) {
             {event.costAmount} {event.costCurrency ?? ""}
           </span>
         )}
+        <span
+          className="flex-shrink-0 inline-flex items-center justify-center rounded-full text-white text-xs font-bold tabular-nums"
+          style={{ background: borderColor, width: "2rem", height: "2rem", fontSize: "0.65rem" }}
+          title={`${displayAttendeeCount}${event.maxAttendees != null ? `/${event.maxAttendees}` : ""} attendee${displayAttendeeCount !== 1 ? "s" : ""}${occCounts ? " (this occurrence)" : ""}`}
+        >
+          {displayAttendeeCount}{event.maxAttendees != null ? `/${event.maxAttendees}` : ""}
+        </span>
       </div>
     </div>
   );
@@ -158,78 +172,50 @@ function EventRow({ event, lastLogin }: EventRowProps) {
 
 // ── Main combined view ────────────────────────────────────────────────────────
 
-export function EventsCombined({ events, allEvents, lastLogin, homeCity, dateRange, onDateRangeChange }: Props) {
-  // Compute initial expansion from homeCity (only on first render)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const initial = useMemo(() => computeInitialExpansion(events, homeCity), []);
+export function EventsCombined({ events, allEvents, lastLogin, drill, onDrill, dateRange, onDateRangeChange }: Props) {
+  // Derive expansion state from drill prop
+  const expandedContinent: string | null =
+    drill.level === "continent" ? drill.continent
+    : drill.level === "country" ? getContinent(drill.country)
+    : drill.level === "city" ? getContinent(drill.country)
+    : null;
 
-  const [expandedContinent, setExpandedContinent] = useState<string | null>(initial.continent);
-  const [expandedCountry, setExpandedCountry] = useState<string | null>(initial.country);
-  const [expandedCity, setExpandedCity] = useState<string | null>(initial.city);
+  const expandedCountry: string | null =
+    drill.level === "country" ? drill.country
+    : drill.level === "city" ? drill.country
+    : null;
+
+  const expandedCity: string | null =
+    drill.level === "city" ? drill.city : null;
 
   // events prop is already date+status filtered (from events-content)
   const hierarchy = useMemo(() => buildLocationHierarchy(events), [events]);
-  const drill: DrillState = useMemo(() => {
-    if (expandedCity && expandedCountry) {
-      return { level: "city", country: expandedCountry, city: expandedCity };
-    }
-    if (expandedCountry) {
-      return { level: "country", country: expandedCountry };
-    }
-    if (expandedContinent) {
-      return { level: "continent", continent: expandedContinent };
-    }
-    return { level: "globe" };
-  }, [expandedContinent, expandedCountry, expandedCity]);
-
-  // Two-way sync: map marker/zoom click updates tree expansion
-  function onMapDrill(d: DrillState) {
-    if (d.level === "globe") {
-      setExpandedContinent(null);
-      setExpandedCountry(null);
-      setExpandedCity(null);
-    } else if (d.level === "continent") {
-      setExpandedContinent(d.continent);
-      setExpandedCountry(null);
-      setExpandedCity(null);
-    } else if (d.level === "country") {
-      setExpandedContinent(getContinent(d.country));
-      setExpandedCountry(d.country);
-      setExpandedCity(null);
-    } else if (d.level === "city") {
-      setExpandedContinent(getContinent(d.country));
-      setExpandedCountry(d.country);
-      setExpandedCity(d.city);
-    }
-  }
 
   function toggleContinent(continent: string) {
     if (expandedContinent === continent) {
-      setExpandedContinent(null);
-      setExpandedCountry(null);
-      setExpandedCity(null);
+      onDrill({ level: "globe" });
     } else {
-      setExpandedContinent(continent);
-      setExpandedCountry(null);
-      setExpandedCity(null);
+      onDrill({ level: "continent", continent });
     }
   }
 
   function toggleCountry(country: string) {
     if (expandedCountry === country) {
-      setExpandedCountry(null);
-      setExpandedCity(null);
+      onDrill({ level: "continent", continent: getContinent(country) });
     } else {
-      setExpandedCountry(country);
-      setExpandedCity(null);
+      onDrill({ level: "country", country });
     }
   }
 
   function toggleCity(city: string) {
-    setExpandedCity((prev) => (prev === city ? null : city));
+    if (expandedCity === city) {
+      onDrill({ level: "country", country: expandedCountry! });
+    } else {
+      onDrill({ level: "city", country: expandedCountry!, city });
+    }
   }
 
-  // Shared row class for each depth level — same font, same text size, only indent changes
+  // Shared row class for each depth level
   const rowBase = "flex w-full items-center gap-2 pr-3 py-2 text-left text-sm font-medium text-gray-700 transition-colors";
 
   return (
@@ -325,6 +311,7 @@ export function EventsCombined({ events, allEvents, lastLogin, homeCity, dateRan
                                               key={event.id}
                                               event={event}
                                               lastLogin={lastLogin}
+                                              dateRange={dateRange}
                                             />
                                           ))}
                                         </div>
@@ -349,7 +336,7 @@ export function EventsCombined({ events, allEvents, lastLogin, homeCity, dateRan
       {/* ── Right: calendar + Leaflet map ───────────────────────── */}
       <div className="flex-1 min-w-0 flex flex-col">
         <EventCalendar
-          events={allEvents}
+          events={events}
           dateRange={dateRange}
           onDateRangeChange={onDateRangeChange}
         />
@@ -359,7 +346,8 @@ export function EventsCombined({ events, allEvents, lastLogin, homeCity, dateRan
             allEvents={allEvents}
             userLastLogin={lastLogin}
             drill={drill}
-            onDrill={onMapDrill}
+            onDrill={onDrill}
+            dateRange={dateRange}
             embedded
           />
         </div>

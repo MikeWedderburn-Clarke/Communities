@@ -84,8 +84,14 @@ export const rsvps = pgTable("rsvps", {
   showName: boolean("show_name").notNull().default(false),
   isTeaching: boolean("is_teaching").notNull().default(false),
   paymentStatus: text("payment_status"), // nullable; null = unpaid; "full" | "concession" | extensible
+  // null = standing RSVP (non-recurring or legacy); "YYYY-MM-DD" = specific occurrence
+  occurrenceDate: text("occurrence_date"),
 }, (table) => ([
-  uniqueIndex("rsvps_event_user_unique").on(table.eventId, table.userId),
+  // Two partial unique indexes — managed manually in the migration SQL:
+  //   "rsvps_no_occurrence_unique"  ON (event_id, user_id)           WHERE occurrence_date IS NULL
+  //   "rsvps_occurrence_unique"     ON (event_id, user_id, occurrence_date) WHERE occurrence_date IS NOT NULL
+  index("rsvps_no_occurrence_unique").on(table.eventId, table.userId),
+  index("rsvps_occurrence_unique").on(table.eventId, table.userId, table.occurrenceDate),
 ]));
 
 // ── Event Groups ─────────────────────────────────────────────────────

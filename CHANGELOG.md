@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ---
 
+## 2026-03-04
+
+- Event calendar: single click selects a day, re-clicking deselects it; shift+click extends range from anchor; click-and-drag selects a range with live preview; navigating to a different month or year automatically clears the selection; help text updated to match
+- Map level 4 (city drill-down): markers now group by venue and show event count instead of per-event attendee count; single-event venues navigate directly on click, multi-event venues open a popup listing all events at that location
+- Per-occurrence RSVPs: `occurrence_date` column added to `rsvps` table; unique constraints allow one RSVP per user per event per occurrence date; RSVP API and service updated; `0002_occurrence_rsvps.sql` migration registered in Drizzle journal
+- PGlite test schema updated to include `occurrence_date` column and per-occurrence unique indexes; validation tests updated to match new `RsvpInput` shape
+
+---
+
 ## 2026-03-03
 
 - `copilot-instructions.md`: move authentication and CI/CD from "Not yet built" to "Implemented features" (both are complete); add Event Groups, Ticket Types, Bookings, Teacher Revenue Splits, status filter pills, calendar range picker, combined tree+map view, What3Words, and continent hierarchy to implemented features list; remove stale mock-auth note from architecture conventions; fix "in-memory SQLite" to "in-memory PGlite"

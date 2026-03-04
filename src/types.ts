@@ -62,6 +62,8 @@ export interface EventSummary {
   attendeeCount: number;
   roleCounts: RoleCounts;
   teacherCount: number;
+  /** Per-occurrence attendance keyed by "YYYY-MM-DD". Only populated for recurring events. */
+  occurrenceAttendance: Record<string, { attendeeCount: number; roleCounts: RoleCounts; teacherCount: number }> | null;
   dateAdded: string;
   lastUpdated: string;
   recurrence: RecurrenceRule | null;
@@ -109,6 +111,8 @@ export interface RsvpInput {
   role: Role;
   showName: boolean;
   isTeaching: boolean;
+  /** "YYYY-MM-DD" for a specific occurrence; null for standing (non-recurring) RSVPs */
+  occurrenceDate?: string | null;
 }
 
 /** Minimal user info returned to the client. */

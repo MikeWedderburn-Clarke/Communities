@@ -15,6 +15,13 @@
       "when": 1772404112301,
       "tag": "0001_cultured_manta",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1772539647000,
+      "tag": "0002_occurrence_rsvps",
+      "breakpoints": true
     }
   ]
 }

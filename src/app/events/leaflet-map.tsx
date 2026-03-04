@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { MapContainer, TileLayer, Marker, useMap, useMapEvent } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvent } from "react-leaflet";
 import L from "leaflet";
 import { BreadcrumbNav } from "./breadcrumbs";
 import { normalizeCityName } from "@/lib/city-utils";
@@ -10,6 +10,7 @@ import { isEventFresh } from "@/lib/event-utils";
 import { DAY_HEX, getEventDay } from "@/lib/day-utils";
 import type { EventSummary } from "@/types";
 import type { DrillState } from "./events-content";
+import type { DateRange } from "./event-calendar";
 
 import "leaflet/dist/leaflet.css";
 
@@ -52,12 +53,13 @@ interface Props {
   userLastLogin: string | null;
   drill: DrillState;
   onDrill: (d: DrillState) => void;
+  dateRange?: DateRange | null;
   height?: number | string;
   /** When true: no outer mt-6 wrapper, no BreadcrumbNav, fills container height */
   embedded?: boolean;
 }
 
-export function LeafletMap({ events, allEvents, userLastLogin, drill, onDrill, height = 480, embedded = false }: Props) {
+export function LeafletMap({ events, allEvents, userLastLogin, drill, onDrill, dateRange = null, height = 480, embedded = false }: Props) {
   // Derive level/activeContinent/activeCountry/activeCity from shared drill state
   const level: Level =
     drill.level === "globe" ? 1 :
@@ -145,6 +147,22 @@ export function LeafletMap({ events, allEvents, userLastLogin, drill, onDrill, h
     };
   }, [allEvents]);
 
+  // Filtered counts (built from `events`, not `allEvents`) — used for bubble labels
+  const { filteredCityCount, filteredCountryCount, filteredContinentCount } = useMemo(() => {
+    const cityCount = new Map<string, number>();
+    const countryCount = new Map<string, number>();
+    const continentCount = new Map<string, number>();
+    for (const event of events) {
+      const canonicalCity = normalizeCityName(event.location.city) ?? event.location.city;
+      const cityKey = `${canonicalCity}||${event.location.country}`;
+      cityCount.set(cityKey, (cityCount.get(cityKey) ?? 0) + 1);
+      countryCount.set(event.location.country, (countryCount.get(event.location.country) ?? 0) + 1);
+      const cont = getContinent(event.location.country);
+      continentCount.set(cont, (continentCount.get(cont) ?? 0) + 1);
+    }
+    return { filteredCityCount: cityCount, filteredCountryCount: countryCount, filteredContinentCount: continentCount };
+  }, [events]);
+
   const globalCenter = useMemo(() => {
     if (events.length === 0) return [20, 0] as [number, number];
     const pts = events.map((event) => ({ lat: event.location.latitude, lng: event.location.longitude }));
@@ -211,31 +229,28 @@ export function LeafletMap({ events, allEvents, userLastLogin, drill, onDrill, h
       action: level === 1 ? undefined : () => onDrill({ level: "globe" }),
     });
     if (activeContinent) {
-      const continentCount = continentMap.get(activeContinent)?.count;
       items.push({
         label: activeContinent,
-        count: continentCount,
+        count: filteredContinentCount.get(activeContinent),
         action: level === 2 ? undefined : () => onDrill({ level: "continent", continent: activeContinent }),
       });
     }
     if (activeCountry) {
-      const countryCount = countryMap.get(activeCountry)?.count;
       items.push({
         label: activeCountry,
-        count: countryCount,
+        count: filteredCountryCount.get(activeCountry),
         action: level === 3 ? undefined : () => onDrill({ level: "country", country: activeCountry }),
       });
     }
     if (activeCity && activeCountry) {
-      const cityCount = cityMap.get(`${activeCity}||${activeCountry}`)?.count;
       items.push({
         label: activeCity,
-        count: cityCount,
+        count: filteredCityCount.get(`${activeCity}||${activeCountry}`),
         action: level === 4 ? undefined : () => onDrill({ level: "city", country: activeCountry, city: activeCity }),
       });
     }
     return items;
-  }, [level, activeContinent, activeCountry, activeCity, events.length, continentMap, countryMap, cityMap, onDrill]);
+  }, [level, activeContinent, activeCountry, activeCity, events.length, filteredContinentCount, filteredCountryCount, filteredCityCount, onDrill]);
 
   const countriesForActiveContinent = activeContinent
     ? countryEntries.filter((c) => c.continent === activeContinent)
@@ -287,41 +302,88 @@ export function LeafletMap({ events, allEvents, userLastLogin, drill, onDrill, h
             maxZoom={19}
           />
           {level === 1 &&
-            continentEntries.map((cont) => (
-              <Marker
-                key={cont.continent}
-                position={cont.center}
-                icon={countIcon(cont.count, freshContinents.has(cont.continent) ? "#3b82f6" : "#7c3aed", `${cont.continent}: ${cont.count} event${cont.count !== 1 ? "s" : ""}`, 64)}
-                eventHandlers={{ click: () => onDrill({ level: "continent", continent: cont.continent }) }}
-              />
-            ))}
+            continentEntries.map((cont) => {
+              const count = filteredContinentCount.get(cont.continent) ?? 0;
+              if (count === 0) return null;
+              return (
+                <Marker
+                  key={cont.continent}
+                  position={cont.center}
+                  icon={countIcon(count, freshContinents.has(cont.continent) ? "#3b82f6" : "#7c3aed", `${cont.continent}: ${count} event${count !== 1 ? "s" : ""}`, 64)}
+                  eventHandlers={{ click: () => onDrill({ level: "continent", continent: cont.continent }) }}
+                />
+              );
+            })}
           {level === 2 &&
-            countriesForActiveContinent.map((country) => (
-              <Marker
-                key={country.country}
-                position={country.center}
-                icon={countIcon(country.count, freshCountries.has(country.country) ? "#3b82f6" : "#6366f1", `${country.country}: ${country.count} event${country.count !== 1 ? "s" : ""}`)}
-                eventHandlers={{ click: () => onDrill({ level: "country", country: country.country }) }}
-              />
-            ))}
+            countriesForActiveContinent.map((country) => {
+              const count = filteredCountryCount.get(country.country) ?? 0;
+              if (count === 0) return null;
+              return (
+                <Marker
+                  key={country.country}
+                  position={country.center}
+                  icon={countIcon(count, freshCountries.has(country.country) ? "#3b82f6" : "#6366f1", `${country.country}: ${count} event${count !== 1 ? "s" : ""}`)}
+                  eventHandlers={{ click: () => onDrill({ level: "country", country: country.country }) }}
+                />
+              );
+            })}
           {level === 3 &&
-            citiesForActiveCountry.map((city) => (
-              <Marker
-                key={`${city.city}-${city.country}`}
-                position={city.center}
-                icon={countIcon(city.count, freshCities.has(`${city.city}||${city.country}`) ? "#3b82f6" : "#0ea5e9", `${city.city}: ${city.count} event${city.count !== 1 ? "s" : ""}`)}
-                eventHandlers={{ click: () => onDrill({ level: "city", country: city.country, city: city.city }) }}
-              />
-            ))}
+            citiesForActiveCountry.map((city) => {
+              const cityKey = `${city.city}||${city.country}`;
+              const count = filteredCityCount.get(cityKey) ?? 0;
+              if (count === 0) return null;
+              return (
+                <Marker
+                  key={`${city.city}-${city.country}`}
+                  position={city.center}
+                  icon={countIcon(count, freshCities.has(cityKey) ? "#3b82f6" : "#0ea5e9", `${city.city}: ${count} event${count !== 1 ? "s" : ""}`)}
+                  eventHandlers={{ click: () => onDrill({ level: "city", country: city.country, city: city.city }) }}
+                />
+              );
+            })}
           {level === 4 &&
-            cityEvents.map((event) => (
-              <Marker
-                key={event.id}
-                position={[event.location.latitude, event.location.longitude]}
-                icon={eventPillIcon(event)}
-                eventHandlers={{ click: () => (window.location.href = `/events/${event.id}?from=map`) }}
-              />
-            ))}
+            (() => {
+              // Group events by location so each venue shows a single pill with event count
+              const locationGroups = new Map<string, EventSummary[]>();
+              for (const event of cityEvents) {
+                const key = event.location.id;
+                if (!locationGroups.has(key)) locationGroups.set(key, []);
+                locationGroups.get(key)!.push(event);
+              }
+              return Array.from(locationGroups.entries()).map(([locId, eventsAtLoc]) => {
+                const first = eventsAtLoc[0];
+                const count = eventsAtLoc.length;
+                const color = count === 1 ? DAY_HEX[getEventDay(first)] : "#6366f1";
+                const title = count === 1
+                  ? first.title
+                  : `${first.location.name}: ${count} events`;
+                return (
+                  <Marker
+                    key={locId}
+                    position={[first.location.latitude, first.location.longitude]}
+                    icon={countIcon(count, color, title, 52)}
+                    eventHandlers={count === 1 ? { click: () => (window.location.href = `/events/${first.id}?from=map`) } : {}}
+                  >
+                    {count > 1 && (
+                      <Popup>
+                        <div className="text-sm space-y-1 min-w-[140px]">
+                          <p className="font-semibold text-gray-700 mb-1">{first.location.name}</p>
+                          {eventsAtLoc.map((e) => (
+                            <a
+                              key={e.id}
+                              href={`/events/${e.id}?from=map`}
+                              className="block text-indigo-600 hover:underline"
+                            >
+                              {e.title}
+                            </a>
+                          ))}
+                        </div>
+                      </Popup>
+                    )}
+                  </Marker>
+                );
+              });
+            })()}
         </MapContainer>
       </div>
     </div>
@@ -451,16 +513,5 @@ function countIcon(count: number, color: string, title?: string, size = 58) {
     className: "",
     iconSize: L.point(size, size),
     iconAnchor: L.point(size / 2, size / 2),
-  });
-}
-
-function eventPillIcon(event: EventSummary) {
-  const color = DAY_HEX[getEventDay(event)];
-  const label = event.title.length > 24 ? `${event.title.slice(0, 23)}…` : event.title;
-  return L.divIcon({
-    html: `<div title="${escapeAttr(event.title)}" style="background:${color};color:#fff;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);cursor:pointer;box-sizing:border-box;">${label}</div>`,
-    className: "",
-    iconSize: L.point(160, 28),
-    iconAnchor: L.point(80, 14),
   });
 }
