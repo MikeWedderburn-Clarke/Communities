@@ -344,6 +344,7 @@ export function EventsCombined({ events, allEvents, lastLogin, drill, onDrill, d
       <div className="flex-1 min-w-0 flex flex-col">
         <EventCalendar
           events={events}
+          allEvents={allEvents}
           dateRange={dateRange}
           onDateRangeChange={onDateRangeChange}
         />
