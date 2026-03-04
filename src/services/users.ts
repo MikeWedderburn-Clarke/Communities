@@ -134,7 +134,7 @@ export function validateProfileInput(
     }
   }
 
-  // Social URLs: optional strings
+  // Social URLs: optional strings, must use http(s) if present
   const urlFields = ["facebookUrl", "instagramUrl", "websiteUrl", "youtubeUrl"] as const;
   const urls: Record<string, string | null> = {};
   for (const field of urlFields) {
@@ -142,7 +142,12 @@ export function validateProfileInput(
       if (typeof obj[field] !== "string") {
         errors.push({ field, message: "Must be a string" });
       } else {
-        urls[field] = (obj[field] as string).trim();
+        const trimmed = (obj[field] as string).trim();
+        if (!/^https?:\/\//i.test(trimmed)) {
+          errors.push({ field, message: "Must be a valid URL starting with https://" });
+        } else {
+          urls[field] = trimmed;
+        }
       }
     } else {
       urls[field] = null;

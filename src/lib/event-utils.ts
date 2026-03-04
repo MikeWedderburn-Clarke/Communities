@@ -1,4 +1,4 @@
-import type { EventSummary } from "@/types";
+import type { EventSummary, RecurrenceFrequency } from "@/types";
 
 function toTimestamp(value: string): number {
   const ts = Date.parse(value);
@@ -23,12 +23,25 @@ export function isEventFresh(event: Pick<EventSummary, "dateAdded" | "lastUpdate
 
 // ── Recurrence helpers ────────────────────────────────────────────────────────
 
+// Maximum iterations when fast-forwarding past the start of a date range.
+const MAX_RECURRENCE_FAST_FORWARD = 2000;
+// Maximum occurrences collected within a single calendar month (daily * 31 + headroom).
+const MAX_MONTH_OCCURRENCES = 200;
+
 /** Advance a local-time Date by one recurrence interval. */
-function advanceLocal(d: Date, frequency: string): Date {
+function advanceLocal(d: Date, frequency: RecurrenceFrequency): Date {
   const next = new Date(d);
-  if (frequency === "daily")        next.setDate(next.getDate() + 1);
-  else if (frequency === "weekly")  next.setDate(next.getDate() + 7);
-  else if (frequency === "monthly") next.setMonth(next.getMonth() + 1);
+  if (frequency === "daily") {
+    next.setDate(next.getDate() + 1);
+  } else if (frequency === "weekly") {
+    next.setDate(next.getDate() + 7);
+  } else if (frequency === "monthly") {
+    const targetMonth = (next.getMonth() + 1) % 12;
+    next.setMonth(next.getMonth() + 1);
+    // setMonth overflows when the day doesn't exist in the target month
+    // (e.g. Jan 31 → would become Mar 3); clamp to last day of intended month.
+    if (next.getMonth() !== targetMonth) next.setDate(0);
+  }
   return next;
 }
 
@@ -59,7 +72,7 @@ export function hasOccurrenceInRange(
   const recEnd = event.recurrence.endDate ? localDay(new Date(event.recurrence.endDate)) : null;
 
   let cur = baseD;
-  for (let i = 0; i < 2000; i++) {
+  for (let i = 0; i < MAX_RECURRENCE_FAST_FORWARD; i++) {
     if (recEnd && cur > recEnd) break;
     if (cur > endD) break;
     if (cur >= startD) return true;
@@ -94,7 +107,7 @@ export function getOccurrenceDatesInMonth(
   let cur = baseD;
 
   // Fast-forward to first occurrence on or after monthStart
-  for (let i = 0; i < 2000; i++) {
+  for (let i = 0; i < MAX_RECURRENCE_FAST_FORWARD; i++) {
     if (recEnd && cur > recEnd) return results;
     if (cur >= monthStart) break;
     const next = advanceLocal(cur, freq);
@@ -103,7 +116,7 @@ export function getOccurrenceDatesInMonth(
   }
 
   // Collect occurrences within the month
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < MAX_MONTH_OCCURRENCES; i++) {
     if (cur > monthEnd) break;
     if (recEnd && cur > recEnd) break;
     results.push(new Date(cur));

@@ -265,7 +265,6 @@ export function LeafletMap({ events, allEvents, userLastLogin, drill, onDrill, d
           scrollWheelZoom
           doubleClickZoom
           touchZoom
-          keyboard={false}
           zoomControl={false}
         >
           <MapController center={currentCenter} zoom={LEVEL_ZOOM[level]} bounds={currentBounds} />

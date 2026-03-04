@@ -12,9 +12,11 @@ All notable changes to this project are documented here.
 - PGlite test schema updated to include `occurrence_date` column and per-occurrence unique indexes; validation tests updated to match new `RsvpInput` shape
 - Performance: `filterCounts` now uses a single-pass loop (was 8 separate `.filter()` calls); four fresh-event memos in `leaflet-map` merged into one
 - Shared date utility: `src/lib/date-utils.ts` added with `toDateString()` (YYYY-MM-DD, local time, no TZ shift); replaces duplicated inline formatting across `events-content`, `events-combined`; `DATE_PATTERN` regex moved to module-level constant in `validation.ts`
-- Type safety: `ZoomWatcherProps.countryMap` typed as `Map<string, CountryEntry>`; `aggregateRoles` uses explicit role equality guards, removing the `as Role` cast
-- Test coverage: 4 new per-occurrence RSVP tests in `visibility.test.ts` (199 tests total)
-- Accessibility: calendar day buttons have `aria-label` (date, has-events, selected state); calendar footer wrapped in `aria-live="polite"` status region; continent/country/city tree buttons have `aria-expanded` + `aria-controls`; tree panel divs have matching `id` + `role="region"`; `CountBadge` has `aria-label="${n} events"`
+- Type safety: `ZoomWatcherProps.countryMap` typed as `Map<string, CountryEntry>`; `aggregateRoles` uses explicit role equality guards, removing the `as Role` cast; `advanceLocal` parameter typed as `RecurrenceFrequency` (was `string`)
+- Test coverage: 4 new per-occurrence RSVP tests in `visibility.test.ts`; 4 new monthly recurrence boundary tests in `event-utils.test.ts` (203 tests total)
+- Accessibility: calendar day buttons have `aria-label` (date, has-events, selected state); calendar footer wrapped in `aria-live="polite"` status region; continent/country/city tree buttons have `aria-expanded` + `aria-controls`; tree panel divs have matching `id` + `role="region"`; `CountBadge` has `aria-label="${n} events"`; Leaflet map keyboard navigation re-enabled (arrow keys pan, +/− zoom)
+- Fix: monthly recurrence `setMonth()` overflow corrected — events on day 29–31 now land on the last valid day of the target month (e.g. Jan 31 → Feb 28) instead of rolling over into the next month
+- Fix: social profile URLs now validated to require `http://` or `https://` protocol, preventing `javascript:` XSS via profile links; recurrence iteration limits extracted to named constants
 
 ---
 
