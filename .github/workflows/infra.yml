@@ -66,8 +66,9 @@ jobs:
           az deployment group create \
             --resource-group "${{ env.RESOURCE_GROUP }}" \
             --template-file infra/main.bicep \
-            --parameters infra/main.bicepparam \
             --parameters \
+              location=uksouth \
+              appName="${{ vars.AZURE_APP_NAME }}" \
               dbAdminPassword="$DB_ADMIN_PASSWORD" \
               authSecret="$AUTH_SECRET" \
               entraClientId="$ENTRA_CLIENT_ID" \
