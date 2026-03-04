@@ -504,3 +504,72 @@ describe("recurrence-aware listings", () => {
     expect(recurring?.recurrence?.frequency).toBe("weekly");
   });
 });
+
+describe("per-occurrence RSVPs", () => {
+  let db: TestDb;
+
+  beforeAll(async () => {
+    db = await createTestDb();
+  });
+
+  afterAll(async () => {
+    await (db as any).$pglite?.close();
+  });
+
+  beforeEach(async () => {
+    await resetDb(db);
+    await seedTestData(db);
+  });
+
+  it("can RSVP for the same event on two different occurrence dates", async () => {
+    await createOrUpdateRsvp(db, "u1", "e1", "Base", true, false, "2026-03-08");
+    await createOrUpdateRsvp(db, "u1", "e1", "Flyer", true, false, "2026-03-15");
+
+    const events = await getAllEvents(db);
+    const event = events.find((e) => e.id === "e1");
+    expect(event).toBeDefined();
+    expect(event!.attendeeCount).toBe(2);
+    expect(event!.occurrenceAttendance?.["2026-03-08"]?.attendeeCount).toBe(1);
+    expect(event!.occurrenceAttendance?.["2026-03-08"]?.roleCounts.Base).toBe(1);
+    expect(event!.occurrenceAttendance?.["2026-03-15"]?.attendeeCount).toBe(1);
+    expect(event!.occurrenceAttendance?.["2026-03-15"]?.roleCounts.Flyer).toBe(1);
+  });
+
+  it("per-occurrence RSVP does not overwrite a standing (null-occurrence) RSVP", async () => {
+    await createOrUpdateRsvp(db, "u1", "e1", "Base", true);                          // standing
+    await createOrUpdateRsvp(db, "u1", "e1", "Flyer", true, false, "2026-03-08");    // per-occurrence
+
+    const events = await getAllEvents(db);
+    const event = events.find((e) => e.id === "e1");
+    expect(event!.attendeeCount).toBe(2);
+
+    // Standing RSVP still exists
+    const detail = await getEventDetail(db, "e1", "u1");
+    expect(detail!.currentUserRsvp?.role).toBe("Base"); // standing wins in getUserRsvpMap
+  });
+
+  it("deleting a per-occurrence RSVP only removes that date, not the standing RSVP", async () => {
+    await createOrUpdateRsvp(db, "u1", "e1", "Base", true);
+    await createOrUpdateRsvp(db, "u1", "e1", "Flyer", true, false, "2026-03-08");
+
+    const deleted = await deleteRsvp(db, "u1", "e1", "2026-03-08");
+    expect(deleted).toBe(true);
+
+    const events = await getAllEvents(db);
+    const event = events.find((e) => e.id === "e1");
+    expect(event!.attendeeCount).toBe(1);
+    expect(event!.occurrenceAttendance?.["2026-03-08"]).toBeUndefined();
+  });
+
+  it("getEventDetail attendeeCount reflects total RSVPs across all occurrences", async () => {
+    await createOrUpdateRsvp(db, "u1", "e1", "Base", true, false, "2026-03-08");
+    await createOrUpdateRsvp(db, "u2", "e1", "Flyer", true, false, "2026-03-08");
+    await createOrUpdateRsvp(db, "u3", "e1", "Hybrid", true, false, "2026-03-15");
+
+    const detail = await getEventDetail(db, "e1", null);
+    expect(detail!.attendeeCount).toBe(3);
+    expect(detail!.roleCounts.Base).toBe(1);
+    expect(detail!.roleCounts.Flyer).toBe(1);
+    expect(detail!.roleCounts.Hybrid).toBe(1);
+  });
+});

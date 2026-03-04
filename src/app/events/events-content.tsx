@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import type { EventSummary } from "@/types";
 import { isEventNew, isEventUpdated, hasOccurrenceInRange } from "@/lib/event-utils";
+import { toDateString } from "@/lib/date-utils";
 import { type DateRange } from "./event-calendar";
 import { buildLocationHierarchy } from "@/lib/location-hierarchy";
 import { normalizeCityName } from "@/lib/city-utils";
@@ -44,10 +45,6 @@ function parseDateRange(from: string | null, to: string | null): DateRange | nul
   const end = new Date(to);
   if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
   return { start, end };
-}
-
-function formatDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export function EventsContent({ events, homeCity, lastLogin, userId }: Props) {
@@ -100,7 +97,7 @@ export function EventsContent({ events, homeCity, lastLogin, userId }: Props) {
   }
 
   function handleDateRangeChange(r: DateRange | null) {
-    updateParams({ from: r ? formatDate(r.start) : null, to: r ? formatDate(r.end) : null });
+    updateParams({ from: r ? toDateString(r.start) : null, to: r ? toDateString(r.end) : null });
   }
 
   function selectFilter(f: FilterKey) {
@@ -113,17 +110,25 @@ export function EventsContent({ events, homeCity, lastLogin, userId }: Props) {
     return events.filter((e) => hasOccurrenceInRange(e, dateRange.start, dateRange.end));
   }, [events, dateRange]);
 
-  // ── Filter counts ──────────────────────────────────────────────────────────
-  const filterCounts = useMemo(() => ({
-    upcoming: preStatusBase.filter((e) => !e.isPast).length,
-    all:      preStatusBase.length,
-    new:      preStatusBase.filter((e) => !e.isPast && isEventNew(e, lastLogin)).length,
-    updated:  preStatusBase.filter((e) => !e.isPast && isEventUpdated(e, lastLogin)).length,
-    full:     preStatusBase.filter((e) => e.isFull).length,
-    past:     preStatusBase.filter((e) => e.isPast).length,
-    booked:   preStatusBase.filter((e) => !e.isPast && e.userRsvp !== null).length,
-    toPay:    preStatusBase.filter((e) => !e.isPast && e.userRsvp !== null && (e.costAmount ?? 0) > 0 && e.userRsvp.paymentStatus === null).length,
-  }), [preStatusBase, lastLogin]);
+  // ── Filter counts — single pass ────────────────────────────────────────────
+  const filterCounts = useMemo(() => {
+    const counts = { upcoming: 0, all: 0, new: 0, updated: 0, full: 0, past: 0, booked: 0, toPay: 0 };
+    for (const e of preStatusBase) {
+      counts.all++;
+      if (e.isPast) {
+        counts.past++;
+      } else {
+        counts.upcoming++;
+        if (isEventNew(e, lastLogin))             counts.new++;
+        if (isEventUpdated(e, lastLogin))         counts.updated++;
+        if (e.isFull)                             counts.full++;
+        if (e.userRsvp !== null)                  counts.booked++;
+        if (e.userRsvp !== null && (e.costAmount ?? 0) > 0 && e.userRsvp.paymentStatus === null)
+          counts.toPay++;
+      }
+    }
+    return counts;
+  }, [preStatusBase, lastLogin]);
 
   // ── Filtered events ────────────────────────────────────────────────────────
   const filteredEvents = useMemo(() => {

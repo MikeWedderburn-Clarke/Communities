@@ -286,6 +286,7 @@ export function EventCalendar({ events, dateRange, onDateRangeChange }: Props) {
                 type="button"
                 onMouseDown={(e) => handleDayMouseDown(day, e)}
                 onMouseEnter={() => handleDayMouseEnter(day)}
+                aria-label={`${day.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}${hasEvents ? ", has events" : ""}${isStart || isEnd || inRange ? ", selected" : ""}`}
                 className={`relative z-10 w-full text-center text-xs py-0.5 rounded transition ${
                   isToday ? "ring-1 ring-inset ring-gray-400" : ""
                 } ${
@@ -304,9 +305,11 @@ export function EventCalendar({ events, dateRange, onDateRangeChange }: Props) {
 
       {/* Footer status + clear */}
       <div className="mt-1 flex items-center justify-between text-xs">
-        <span className={isDragging ? "text-indigo-600 font-medium" : "text-gray-400"}>
-          {footerText}
-        </span>
+        <div role="status" aria-live="polite" aria-atomic="true">
+          <span className={isDragging ? "text-indigo-600 font-medium" : "text-gray-400"}>
+            {footerText}
+          </span>
+        </div>
         {dateRange && (
           <button
             type="button"

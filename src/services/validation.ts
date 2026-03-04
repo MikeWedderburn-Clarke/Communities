@@ -5,6 +5,8 @@ export interface ValidationError {
   message: string;
 }
 
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
 export function validateRsvpInput(body: unknown): {
   valid: true;
   data: { eventId: string; role: Role; showName: boolean; isTeaching: boolean; occurrenceDate: string | null };
@@ -38,7 +40,7 @@ export function validateRsvpInput(body: unknown): {
 
   let occurrenceDate: string | null = null;
   if (obj.occurrenceDate !== undefined && obj.occurrenceDate !== null) {
-    if (typeof obj.occurrenceDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(obj.occurrenceDate)) {
+    if (typeof obj.occurrenceDate !== "string" || !DATE_PATTERN.test(obj.occurrenceDate)) {
       errors.push({ field: "occurrenceDate", message: "occurrenceDate must be a YYYY-MM-DD date string" });
     } else {
       occurrenceDate = obj.occurrenceDate;

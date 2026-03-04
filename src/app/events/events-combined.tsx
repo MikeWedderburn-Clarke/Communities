@@ -6,6 +6,7 @@ import { useMemo, type ReactNode } from "react";
 import { DAY_HEX, getEventDay } from "@/lib/day-utils";
 import { buildLocationHierarchy, getContinent } from "@/lib/location-hierarchy";
 import { isEventNew, isEventUpdated } from "@/lib/event-utils";
+import { toDateString } from "@/lib/date-utils";
 import { RoleBadges } from "@/components/role-badges";
 import { EventCalendar, type DateRange } from "./event-calendar";
 import type { EventSummary } from "@/types";
@@ -53,7 +54,7 @@ function Chevron({ expanded }: { expanded: boolean }) {
 
 function CountBadge({ n }: { n: number }) {
   return (
-    <span className="flex-shrink-0 min-w-[1.5rem] text-center rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500 tabular-nums">
+    <span aria-label={`${n} events`} className="flex-shrink-0 min-w-[1.5rem] text-center rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500 tabular-nums">
       {n}
     </span>
   );
@@ -94,8 +95,8 @@ function EventRow({ event, lastLogin, dateRange }: EventRowProps) {
   // If a date range is active, look up per-occurrence counts
   const occCounts = (() => {
     if (!dateRange || !event.occurrenceAttendance) return null;
-    const startStr = `${dateRange.start.getFullYear()}-${String(dateRange.start.getMonth() + 1).padStart(2, "0")}-${String(dateRange.start.getDate()).padStart(2, "0")}`;
-    const endStr   = `${dateRange.end.getFullYear()}-${String(dateRange.end.getMonth() + 1).padStart(2, "0")}-${String(dateRange.end.getDate()).padStart(2, "0")}`;
+    const startStr = toDateString(dateRange.start);
+    const endStr   = toDateString(dateRange.end);
     const keys = Object.keys(event.occurrenceAttendance).filter((k) => k >= startStr && k <= endStr);
     if (keys.length === 0) return null;
     let attendeeCount = 0;
@@ -244,6 +245,8 @@ export function EventsCombined({ events, allEvents, lastLogin, drill, onDrill, d
                   <button
                     type="button"
                     onClick={() => toggleContinent(continentGroup.continent)}
+                    aria-expanded={isContinentOpen}
+                    aria-controls={`continent-panel-${continentGroup.continent.replace(/\s/g, "-")}`}
                     className={`${rowBase} pl-2 ${isContinentOpen ? "bg-violet-50 text-violet-900" : "hover:bg-gray-50"}`}
                   >
                     <Chevron expanded={isContinentOpen} />
@@ -254,7 +257,7 @@ export function EventsCombined({ events, allEvents, lastLogin, drill, onDrill, d
 
                   {/* Countries */}
                   {isContinentOpen && (
-                    <div className="border-t border-gray-100">
+                    <div id={`continent-panel-${continentGroup.continent.replace(/\s/g, "-")}`} role="region" className="border-t border-gray-100">
                       {continentGroup.countries.map((countryGroup) => {
                         const isCountryOpen = expandedCountry === countryGroup.country;
                         const countryFresh = countryGroup.cities.some((ci) =>
@@ -270,6 +273,8 @@ export function EventsCombined({ events, allEvents, lastLogin, drill, onDrill, d
                             <button
                               type="button"
                               onClick={() => toggleCountry(countryGroup.country)}
+                              aria-expanded={isCountryOpen}
+                              aria-controls={`country-panel-${countryGroup.country.replace(/\s/g, "-")}`}
                               className={`${rowBase} pl-6 ${isCountryOpen ? "bg-indigo-50 text-indigo-900" : "hover:bg-gray-50"}`}
                             >
                               <Chevron expanded={isCountryOpen} />
@@ -280,7 +285,7 @@ export function EventsCombined({ events, allEvents, lastLogin, drill, onDrill, d
 
                             {/* Cities */}
                             {isCountryOpen && (
-                              <div className="border-t border-gray-100">
+                              <div id={`country-panel-${countryGroup.country.replace(/\s/g, "-")}`} role="region" className="border-t border-gray-100">
                                 {countryGroup.cities.map((cityGroup) => {
                                   const isCityOpen = expandedCity === cityGroup.city;
                                   const cityEvents = cityGroup.venues.flatMap((v) => v.events);
@@ -295,6 +300,8 @@ export function EventsCombined({ events, allEvents, lastLogin, drill, onDrill, d
                                       <button
                                         type="button"
                                         onClick={() => toggleCity(cityGroup.city)}
+                                        aria-expanded={isCityOpen}
+                                        aria-controls={`city-panel-${cityGroup.city.replace(/\s/g, "-")}`}
                                         className={`${rowBase} pl-10 ${isCityOpen ? "bg-cyan-50 text-cyan-900" : "hover:bg-gray-50"}`}
                                       >
                                         <Chevron expanded={isCityOpen} />
@@ -305,7 +312,7 @@ export function EventsCombined({ events, allEvents, lastLogin, drill, onDrill, d
 
                                       {/* Events — depth 3 */}
                                       {isCityOpen && (
-                                        <div className="divide-y divide-gray-100 border-t border-gray-100">
+                                        <div id={`city-panel-${cityGroup.city.replace(/\s/g, "-")}`} className="divide-y divide-gray-100 border-t border-gray-100">
                                           {cityEvents.map((event) => (
                                             <EventRow
                                               key={event.id}

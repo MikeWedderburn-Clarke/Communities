@@ -10,8 +10,8 @@ import type { EventSummary, EventDetail, RoleCounts, Role, SkillLevel, TeacherRe
 export function aggregateRoles(rsvps: { role: string }[]): RoleCounts {
   const counts: RoleCounts = { Base: 0, Flyer: 0, Hybrid: 0 };
   for (const r of rsvps) {
-    if (r.role in counts) {
-      counts[r.role as Role]++;
+    if (r.role === "Base" || r.role === "Flyer" || r.role === "Hybrid") {
+      counts[r.role]++;
     }
   }
   return counts;

@@ -10,6 +10,11 @@ All notable changes to this project are documented here.
 - Map level 4 (city drill-down): markers now group by venue and show event count instead of per-event attendee count; single-event venues navigate directly on click, multi-event venues open a popup listing all events at that location
 - Per-occurrence RSVPs: `occurrence_date` column added to `rsvps` table; unique constraints allow one RSVP per user per event per occurrence date; RSVP API and service updated; `0002_occurrence_rsvps.sql` migration registered in Drizzle journal
 - PGlite test schema updated to include `occurrence_date` column and per-occurrence unique indexes; validation tests updated to match new `RsvpInput` shape
+- Performance: `filterCounts` now uses a single-pass loop (was 8 separate `.filter()` calls); four fresh-event memos in `leaflet-map` merged into one
+- Shared date utility: `src/lib/date-utils.ts` added with `toDateString()` (YYYY-MM-DD, local time, no TZ shift); replaces duplicated inline formatting across `events-content`, `events-combined`; `DATE_PATTERN` regex moved to module-level constant in `validation.ts`
+- Type safety: `ZoomWatcherProps.countryMap` typed as `Map<string, CountryEntry>`; `aggregateRoles` uses explicit role equality guards, removing the `as Role` cast
+- Test coverage: 4 new per-occurrence RSVP tests in `visibility.test.ts` (199 tests total)
+- Accessibility: calendar day buttons have `aria-label` (date, has-events, selected state); calendar footer wrapped in `aria-live="polite"` status region; continent/country/city tree buttons have `aria-expanded` + `aria-controls`; tree panel divs have matching `id` + `role="region"`; `CountBadge` has `aria-label="${n} events"`
 
 ---
 

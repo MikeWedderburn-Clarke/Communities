@@ -169,37 +169,20 @@ export function LeafletMap({ events, allEvents, userLastLogin, drill, onDrill, d
     return centroid(pts);
   }, [events]);
 
-  const freshEventIds = useMemo(
-    () => new Set(events.filter((event) => isEventFresh(event, userLastLogin)).map((event) => event.id)),
-    [events, userLastLogin],
-  );
-
-  const freshCountries = useMemo(() => {
-    const set = new Set<string>();
+  // Single pass for all freshness sets
+  const { freshCountries, freshContinents, freshCities } = useMemo(() => {
+    const countries  = new Set<string>();
+    const continents = new Set<string>();
+    const cities     = new Set<string>();
     for (const event of events) {
-      if (freshEventIds.has(event.id)) set.add(event.location.country);
+      if (!isEventFresh(event, userLastLogin)) continue;
+      countries.add(event.location.country);
+      continents.add(getContinent(event.location.country));
+      const canonical = normalizeCityName(event.location.city) ?? event.location.city;
+      cities.add(`${canonical}||${event.location.country}`);
     }
-    return set;
-  }, [events, freshEventIds]);
-
-  const freshContinents = useMemo(() => {
-    const set = new Set<string>();
-    for (const event of events) {
-      if (freshEventIds.has(event.id)) set.add(getContinent(event.location.country));
-    }
-    return set;
-  }, [events, freshEventIds]);
-
-  const freshCities = useMemo(() => {
-    const set = new Set<string>();
-    for (const event of events) {
-      if (freshEventIds.has(event.id)) {
-        const canonical = normalizeCityName(event.location.city) ?? event.location.city;
-        set.add(`${canonical}||${event.location.country}`);
-      }
-    }
-    return set;
-  }, [events, freshEventIds]);
+    return { freshCountries: countries, freshContinents: continents, freshCities: cities };
+  }, [events, userLastLogin]);
 
   const currentCenter = useMemo<[number, number]>(() => {
     if (level === 4 && activeCity && activeCountry) {
@@ -399,7 +382,7 @@ interface ZoomWatcherProps {
   continentEntries: ContinentEntry[];
   countryEntries: CountryEntry[];
   cityEntries: CityEntry[];
-  countryMap: Map<string, { continent: string }>;
+  countryMap: Map<string, CountryEntry>;
 }
 
 function ZoomWatcher({ level, drill, onDrill, continentEntries, countryEntries, cityEntries, countryMap }: ZoomWatcherProps) {
