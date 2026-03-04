@@ -95,7 +95,7 @@ jobs:
           " 2>/dev/null || echo "unavailable")
 
           echo ""
-          echo "App URL  : https://$APP_URL"
+          echo "App URL  : $APP_URL"
           echo "Registry : $REGISTRY"
           echo ""
           echo "Run the 'CI / Deploy' workflow (or push a commit to main) to deploy the app image."

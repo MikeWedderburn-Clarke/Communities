@@ -23,6 +23,16 @@ param entraClientSecret string = ''
 
 param entraIssuer string = ''
 
+var hasEntra = !empty(entraClientSecret)
+
+var entraSecrets = hasEntra ? [
+  { name: 'entra-client-secret', value: entraClientSecret }
+] : []
+
+var entraEnv = hasEntra ? [
+  { name: 'AUTH_ENTRA_CLIENT_SECRET', secretRef: 'entra-client-secret' }
+] : []
+
 // Container Apps environment (consumption plan)
 resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: '${appName}-env'
@@ -59,11 +69,10 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
           identity: 'system'
         }
       ]
-      secrets: [
+      secrets: concat([
         { name: 'database-url', value: databaseUrl }
         { name: 'auth-secret', value: authSecret }
-        { name: 'entra-client-secret', value: entraClientSecret }
-      ]
+      ], entraSecrets)
     }
     template: {
       containers: [
@@ -74,15 +83,14 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
             cpu: json('0.5')
             memory: '1Gi'
           }
-          env: [
+          env: concat([
             { name: 'NODE_ENV', value: 'production' }
             { name: 'DATABASE_URL', secretRef: 'database-url' }
             { name: 'AUTH_SECRET', secretRef: 'auth-secret' }
             { name: 'MOCK_AUTH', value: mockAuth }
             { name: 'AUTH_ENTRA_CLIENT_ID', value: entraClientId }
-            { name: 'AUTH_ENTRA_CLIENT_SECRET', secretRef: 'entra-client-secret' }
             { name: 'AUTH_ENTRA_ISSUER', value: entraIssuer }
-          ]
+          ], entraEnv)
         }
       ]
       scale: {
