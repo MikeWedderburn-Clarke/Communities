@@ -52,6 +52,14 @@ jobs:
         env:
           CLIENT_ID: ${{ secrets.AUTH_ENTRA_CLIENT_ID }}
 
+      # Register resource providers — required on fresh subscriptions. Idempotent.
+      - name: Register resource providers
+        run: |
+          az provider register --namespace Microsoft.ContainerRegistry --wait
+          az provider register --namespace Microsoft.DBforPostgreSQL --wait
+          az provider register --namespace Microsoft.App --wait
+          az provider register --namespace Microsoft.OperationalInsights --wait
+
       # Secrets are passed via env vars so they remain masked in GitHub Actions logs.
       - name: Deploy Bicep infrastructure
         id: deploy
