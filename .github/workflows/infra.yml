@@ -1,0 +1,100 @@
+name: Infrastructure
+
+# Deploys or updates the Azure Bicep infrastructure (ACR, PostgreSQL, Container Apps).
+# Run AFTER adding all GitHub secrets and variables — see scripts/bootstrap-azure.sh.
+#
+# Trigger manually from the Actions tab before the first app deploy, then again
+# whenever infra/main.bicep or its modules change.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-infra:
+    name: Deploy Bicep infrastructure
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write   # Required for OIDC authentication to Azure
+
+    env:
+      RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Determine whether to start with mock auth.
+      # mockAuth=true  → app starts without Entra (safe until Entra is configured).
+      # mockAuth=false → app uses Entra External ID (requires the three AUTH_ENTRA_* secrets).
+      - name: Determine mockAuth flag
+        id: auth_mode
+        run: |
+          if [ -n "$CLIENT_ID" ]; then
+            echo "value=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          CLIENT_ID: ${{ secrets.AUTH_ENTRA_CLIENT_ID }}
+
+      # Secrets are passed via env vars so they remain masked in GitHub Actions logs.
+      - name: Deploy Bicep infrastructure
+        id: deploy
+        env:
+          DB_ADMIN_PASSWORD:     ${{ secrets.DB_ADMIN_PASSWORD }}
+          AUTH_SECRET:           ${{ secrets.AUTH_SECRET }}
+          ENTRA_CLIENT_ID:       ${{ secrets.AUTH_ENTRA_CLIENT_ID }}
+          ENTRA_CLIENT_SECRET:   ${{ secrets.AUTH_ENTRA_CLIENT_SECRET }}
+          ENTRA_ISSUER:          ${{ secrets.AUTH_ENTRA_ISSUER }}
+          MOCK_AUTH:             ${{ steps.auth_mode.outputs.value }}
+        run: |
+          az deployment group create \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam \
+            --parameters \
+              dbAdminPassword="$DB_ADMIN_PASSWORD" \
+              authSecret="$AUTH_SECRET" \
+              entraClientId="$ENTRA_CLIENT_ID" \
+              entraClientSecret="$ENTRA_CLIENT_SECRET" \
+              entraIssuer="$ENTRA_ISSUER" \
+              mockAuth="$MOCK_AUTH" \
+            --output json \
+            | tee /tmp/deploy-output.json
+
+      - name: Show deployment outputs
+        run: |
+          APP_URL=$(python3 -c "
+          import json
+          with open('/tmp/deploy-output.json') as f:
+            d = json.load(f)
+          print(d['properties']['outputs']['appUrl']['value'])
+          " 2>/dev/null || echo "unavailable")
+
+          REGISTRY=$(python3 -c "
+          import json
+          with open('/tmp/deploy-output.json') as f:
+            d = json.load(f)
+          print(d['properties']['outputs']['registryLoginServer']['value'])
+          " 2>/dev/null || echo "unavailable")
+
+          echo ""
+          echo "App URL  : https://$APP_URL"
+          echo "Registry : $REGISTRY"
+          echo ""
+          echo "Run the 'CI / Deploy' workflow (or push a commit to main) to deploy the app image."

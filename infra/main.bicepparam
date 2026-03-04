@@ -3,10 +3,10 @@
 using 'main.bicep'
 
 param location = 'uksouth'
-param appName = 'communities'
+param appName = 'ayc'
 
 // containerImage is set by the CI pipeline; override here for manual deploys:
-// param containerImage = 'communitiescr.azurecr.io/communities:latest'
+// param containerImage = 'ayccr.azurecr.io/ayc:latest'
 
 // Secrets — do NOT commit real values; use environment-specific overrides in CI.
 // param dbAdminPassword = ''
