@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DAY_HEX } from "@/lib/day-utils";
 import { getOccurrenceDatesInMonth, hasOccurrenceInRange } from "@/lib/event-utils";
 import type { EventSummary } from "@/types";
@@ -54,8 +54,14 @@ interface Props {
 }
 
 export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange }: Props) {
-  const today = useMemo(() => stripTime(new Date()), []);
-  const currentYear = today.getFullYear();
+  const currentYear = new Date().getFullYear();
+
+  // todayKey computed client-side only — avoids SSR/client hydration mismatch
+  // when the server and browser render on different clock values.
+  const [todayKey, setTodayKey] = useState<string>("");
+  useEffect(() => {
+    setTodayKey(toKey(stripTime(new Date())));
+  }, []);
 
   const [year, setYear] = useState(() => dateRange?.start.getFullYear() ?? currentYear);
 
@@ -69,13 +75,22 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
     return isFullYear ? null : dateRange.start.getMonth();
   });
 
-  // Anchor for shift+click range extension
+  // Anchor for shift+click — state is fine here since shift+click is two
+  // separate user interactions with a re-render in between.
   const [anchorDate, setAnchorDate] = useState<Date | null>(null);
-  // Drag state
-  const [isDragging, setIsDragging] = useState(false);
-  const [hoverDate, setHoverDate]   = useState<Date | null>(null);
 
-  // On mount: if no dateRange exists, emit the current year range so events are filtered immediately
+  // Drag state stored in refs to avoid stale-closure bug:
+  // On a single click, mousedown and mouseup fire within the same browser task
+  // before React has a chance to re-render, so event handlers that read state
+  // see the previous render's values. Refs are always current.
+  const isDraggingRef = useRef(false);
+  const anchorRef     = useRef<Date | null>(null);
+  const hoverRef      = useRef<Date | null>(null);
+
+  // Separate state drives the visual drag preview (triggers re-render).
+  const [dragPreview, setDragPreview] = useState<DateRange | null>(null);
+
+  // On mount: if no dateRange exists, emit the current year range immediately.
   useEffect(() => {
     if (!dateRange) {
       onDateRangeChange({ start: new Date(year, 0, 1), end: new Date(year, 11, 31) });
@@ -120,14 +135,6 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
   );
 
   // Preview: live drag range or committed range
-  const dragPreview: DateRange | null =
-    isDragging && anchorDate && hoverDate
-      ? {
-          start: anchorDate <= hoverDate ? anchorDate : hoverDate,
-          end:   anchorDate <= hoverDate ? hoverDate   : anchorDate,
-        }
-      : null;
-
   const preview: DateRange | null = dragPreview ?? dateRange;
 
   // ── Year navigation ────────────────────────────────────────────────────────
@@ -136,8 +143,10 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
     setYear(newYear);
     setSelectedMonth(null);
     setAnchorDate(null);
-    setHoverDate(null);
-    setIsDragging(false);
+    isDraggingRef.current = false;
+    anchorRef.current     = null;
+    hoverRef.current      = null;
+    setDragPreview(null);
     onDateRangeChange({ start: new Date(newYear, 0, 1), end: new Date(newYear, 11, 31) });
   }
 
@@ -145,14 +154,14 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
 
   function handleMonthToggle(m: number) {
     setAnchorDate(null);
-    setHoverDate(null);
-    setIsDragging(false);
+    isDraggingRef.current = false;
+    anchorRef.current     = null;
+    hoverRef.current      = null;
+    setDragPreview(null);
     if (selectedMonth === m) {
-      // Deselect → revert to full year
       setSelectedMonth(null);
       onDateRangeChange({ start: new Date(year, 0, 1), end: new Date(year, 11, 31) });
     } else {
-      // Select this month
       setSelectedMonth(m);
       onDateRangeChange({ start: new Date(year, m, 1), end: new Date(year, m + 1, 0) });
     }
@@ -173,23 +182,39 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
       }
       return;
     }
-    setIsDragging(true);
-    setAnchorDate(day);
-    setHoverDate(day);
+    // Write to refs immediately — no batching delay, always readable in mouseup
+    isDraggingRef.current = true;
+    anchorRef.current     = day;
+    hoverRef.current      = day;
+    setDragPreview({ start: day, end: day });
   }
 
   function handleDayMouseEnter(day: Date) {
-    if (isDragging) setHoverDate(day);
+    if (!isDraggingRef.current || !anchorRef.current) return;
+    hoverRef.current = day;
+    const anchor = anchorRef.current;
+    setDragPreview({
+      start: anchor <= day ? anchor : day,
+      end:   anchor <= day ? day    : anchor,
+    });
   }
 
-  // Commit selection on mouse-up anywhere in the calendar container
+  // Commit selection — reads refs, not state, so always sees current values
+  // even when mouseup fires in the same browser task as mousedown.
   function handleContainerMouseUp() {
-    if (!isDragging || !anchorDate) return;
-    setIsDragging(false);
-    const end = hoverDate ?? anchorDate;
-    const start = anchorDate <= end ? anchorDate : end;
-    const endDate = anchorDate <= end ? end : anchorDate;
-    // Toggle: clicking the already-selected single day deselects it → revert to month range
+    if (!isDraggingRef.current || !anchorRef.current) return;
+    const anchor = anchorRef.current;
+    const hover  = hoverRef.current ?? anchor;
+
+    isDraggingRef.current = false;
+    anchorRef.current     = null;
+    hoverRef.current      = null;
+    setDragPreview(null);
+
+    const start   = anchor <= hover ? anchor : hover;
+    const endDate = anchor <= hover ? hover  : anchor;
+
+    // Toggle: re-clicking the already-selected single day → revert to month range
     if (
       isSameDay(start, endDate) &&
       dateRange &&
@@ -197,15 +222,18 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
       isSameDay(start, dateRange.start)
     ) {
       if (selectedMonth !== null) {
-        onDateRangeChange({ start: new Date(year, selectedMonth, 1), end: new Date(year, selectedMonth + 1, 0) });
+        onDateRangeChange({
+          start: new Date(year, selectedMonth, 1),
+          end:   new Date(year, selectedMonth + 1, 0),
+        });
       } else {
         onDateRangeChange(null);
       }
       setAnchorDate(null);
     } else {
+      setAnchorDate(start);
       onDateRangeChange({ start, end: endDate });
     }
-    setHoverDate(null);
   }
 
   // Clear day selection → revert to month range (keep month selected)
@@ -216,14 +244,13 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
       onDateRangeChange(null);
     }
     setAnchorDate(null);
-    setHoverDate(null);
-    setIsDragging(false);
+    isDraggingRef.current = false;
+    anchorRef.current     = null;
+    hoverRef.current      = null;
+    setDragPreview(null);
   }
 
-  const todayKey = toKey(today);
-
-  // Show "Clear" only when a specific day range is active within the selected month
-  // (not when dateRange equals the whole month)
+  // Show "Clear" only when a specific day range is active (not the whole month)
   const isDaySelected =
     dateRange !== null &&
     selectedMonth !== null &&
@@ -232,11 +259,13 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
       isSameDay(dateRange.end, new Date(year, selectedMonth + 1, 0))
     );
 
+  const isActiveDrag = !!dragPreview;
+
   // Footer text
   let footerText: string;
-  if (isDragging && dragPreview) {
+  if (isActiveDrag && dragPreview) {
     const s = dragPreview.start.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-    const e = dragPreview.end.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    const e = dragPreview.end.toLocaleDateString("en-GB",   { day: "numeric", month: "short" });
     footerText = isSameDay(dragPreview.start, dragPreview.end) ? s : `${s} → ${e}`;
   } else if (isDaySelected && dateRange) {
     const sameYear = dateRange.start.getFullYear() === dateRange.end.getFullYear();
@@ -256,8 +285,8 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
       onMouseUp={handleContainerMouseUp}
       onMouseLeave={handleContainerMouseUp}
     >
-      {/* Year nav — single year with prev/next chevrons */}
-      <div className="flex items-center gap-1 mb-1">
+      {/* Year nav — compact, left-aligned, not stretched */}
+      <div className="inline-flex items-center gap-1 mb-1">
         <button
           type="button"
           onClick={() => changeYear(year - 1)}
@@ -266,7 +295,7 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
         >
           ‹
         </button>
-        <span className="flex-1 text-center text-xs font-semibold text-gray-700 tabular-nums">
+        <span className="text-xs font-semibold text-gray-700 tabular-nums px-0.5">
           {year} ({yearCount})
         </span>
         <button
@@ -325,11 +354,11 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
           {cells.map((day, idx) => {
             if (!day) return <div key={idx} />;
 
-            const hex    = DAY_HEX[day.getDay()];
-            const key    = toKey(day);
-            const count  = eventDayCounts.get(key) ?? 0;
+            const hex       = DAY_HEX[day.getDay()];
+            const key       = toKey(day);
+            const count     = eventDayCounts.get(key) ?? 0;
             const hasEvents = count > 0;
-            const isToday   = key === todayKey;
+            const isToday   = todayKey !== "" && key === todayKey;
 
             let isStart = false, isEnd = false, inRange = false;
             if (preview) {
@@ -343,8 +372,8 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
             let fontWeight = "500";
 
             if (isStart || isEnd) {
-              bg        = hex;
-              color     = "#ffffff";
+              bg         = hex;
+              color      = "#ffffff";
               fontWeight = "700";
             } else if (inRange) {
               bg = hex + "50";
@@ -355,6 +384,9 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
             }
 
             const showConnector = inRange || isStart || isEnd;
+
+            // Inline count: "15" or "15 (3)"
+            const dayLabel = hasEvents ? `${day.getDate()} (${count})` : String(day.getDate());
 
             return (
               <div
@@ -367,7 +399,7 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
                   onMouseDown={(e) => handleDayMouseDown(day, e)}
                   onMouseEnter={() => handleDayMouseEnter(day)}
                   aria-label={`${day.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}${hasEvents ? `, ${count} event${count !== 1 ? "s" : ""}` : ""}${isStart || isEnd || inRange ? ", selected" : ""}`}
-                  className={`relative z-10 w-full text-center text-xs py-0.5 rounded transition flex flex-col items-center leading-none gap-px ${
+                  className={`relative z-10 w-full text-center text-xs py-0.5 rounded transition leading-none ${
                     isToday ? "ring-1 ring-inset ring-gray-400" : ""
                   } ${
                     !hasEvents && !isStart && !isEnd && !inRange
@@ -376,15 +408,7 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
                   }`}
                   style={{ backgroundColor: bg, color, fontWeight }}
                 >
-                  <span>{day.getDate()}</span>
-                  {count > 0 && (
-                    <span
-                      className="tabular-nums"
-                      style={{ fontSize: "0.55rem", lineHeight: 1, opacity: isStart || isEnd ? 0.85 : 0.65 }}
-                    >
-                      {count}
-                    </span>
-                  )}
+                  {dayLabel}
                 </button>
               </div>
             );
@@ -395,7 +419,7 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
       {/* Footer status + clear */}
       <div className="mt-1 flex items-center justify-between text-xs">
         <div role="status" aria-live="polite" aria-atomic="true">
-          <span className={isDragging ? "text-indigo-600 font-medium" : "text-gray-400"}>
+          <span className={isActiveDrag ? "text-indigo-600 font-medium" : "text-gray-400"}>
             {footerText}
           </span>
         </div>
