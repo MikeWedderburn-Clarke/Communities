@@ -144,6 +144,21 @@ export function EventsContent({ events, homeCity, lastLogin, userId }: Props) {
     }
   }, [preStatusBase, activeFilter, lastLogin]);
 
+  // Status-filtered but NOT date-filtered — used for calendar year/month counts
+  // so the counts reflect the active status filter across all time periods.
+  const statusFilteredEvents = useMemo(() => {
+    switch (activeFilter) {
+      case "all":     return events;
+      case "new":     return events.filter((e) => !e.isPast && isEventNew(e, lastLogin));
+      case "updated": return events.filter((e) => !e.isPast && isEventUpdated(e, lastLogin));
+      case "full":    return events.filter((e) => e.isFull);
+      case "past":    return events.filter((e) => e.isPast);
+      case "booked":  return events.filter((e) => !e.isPast && e.userRsvp !== null);
+      case "toPay":   return events.filter((e) => !e.isPast && e.userRsvp !== null && (e.costAmount ?? 0) > 0 && e.userRsvp.paymentStatus === null);
+      default:        return events.filter((e) => !e.isPast);
+    }
+  }, [events, activeFilter, lastLogin]);
+
   type FilterDef = { key: FilterKey; label: string; selectedCls: string; loggedInOnly?: boolean };
 
   const filterDefs: FilterDef[] = [
@@ -211,7 +226,7 @@ export function EventsContent({ events, homeCity, lastLogin, userId }: Props) {
 
       <EventsCombined
         events={filteredEvents}
-        allEvents={events}
+        allEvents={statusFilteredEvents}
         lastLogin={lastLogin}
         drill={locationDrill}
         onDrill={handleDrill}

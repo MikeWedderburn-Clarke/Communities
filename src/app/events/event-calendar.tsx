@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DAY_HEX } from "@/lib/day-utils";
-import { getOccurrenceDatesInMonth, hasOccurrenceInRange } from "@/lib/event-utils";
+import { getOccurrenceDatesInMonth } from "@/lib/event-utils";
 import type { EventSummary } from "@/types";
 
 export interface DateRange {
@@ -45,9 +45,9 @@ const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props {
-  /** Status-filtered displayed events — used for day counts in the grid. */
+  /** Status+date-filtered events — used for day occurrence counts in the grid. */
   events: EventSummary[];
-  /** All events (unfiltered by date) — used for year and month counts. */
+  /** Status-filtered (not date-filtered) events — used for year/month occurrence counts. */
   allEvents: EventSummary[];
   dateRange: DateRange | null;
   onDateRangeChange: (r: DateRange | null) => void;
@@ -56,8 +56,7 @@ interface Props {
 export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange }: Props) {
   const currentYear = new Date().getFullYear();
 
-  // todayKey computed client-side only — avoids SSR/client hydration mismatch
-  // when the server and browser render on different clock values.
+  // todayKey computed client-side only — avoids SSR/client hydration mismatch.
   const [todayKey, setTodayKey] = useState<string>("");
   useEffect(() => {
     setTodayKey(toKey(stripTime(new Date())));
@@ -75,14 +74,16 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
     return isFullYear ? null : dateRange.start.getMonth();
   });
 
-  // Anchor for shift+click — state is fine here since shift+click is two
-  // separate user interactions with a re-render in between.
+  // daySelectionActive: true only when the user has explicitly clicked/dragged
+  // days. When false, the day grid shows event markers but no selection box.
+  const [daySelectionActive, setDaySelectionActive] = useState(false);
+
+  // Anchor for shift+click — plain state is fine here (two separate clicks).
   const [anchorDate, setAnchorDate] = useState<Date | null>(null);
 
   // Drag state stored in refs to avoid stale-closure bug:
-  // On a single click, mousedown and mouseup fire within the same browser task
-  // before React has a chance to re-render, so event handlers that read state
-  // see the previous render's values. Refs are always current.
+  // mousedown and mouseup can fire within the same browser task before React
+  // re-renders, so handlers must read refs instead of state.
   const isDraggingRef = useRef(false);
   const anchorRef     = useRef<Date | null>(null);
   const hoverRef      = useRef<Date | null>(null);
@@ -90,7 +91,7 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
   // Separate state drives the visual drag preview (triggers re-render).
   const [dragPreview, setDragPreview] = useState<DateRange | null>(null);
 
-  // On mount: if no dateRange exists, emit the current year range immediately.
+  // On mount: emit year range if none set.
   useEffect(() => {
     if (!dateRange) {
       onDateRangeChange({ start: new Date(year, 0, 1), end: new Date(year, 11, 31) });
@@ -98,25 +99,24 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Year count (allEvents, year-scoped) ────────────────────────────────────
-  const yearCount = useMemo(() => {
-    const start = new Date(year, 0, 1);
-    const end   = new Date(year, 11, 31);
-    return allEvents.filter((e) => hasOccurrenceInRange(e, start, end)).length;
-  }, [allEvents, year]);
-
-  // ── Month counts (allEvents, all 12 months for this year) ─────────────────
+  // ── Month occurrence counts (allEvents, all 12 months) ────────────────────
+  // Counts total occurrences (not unique events) within the status filter.
   const monthCounts = useMemo(() => {
     const counts = new Array<number>(12).fill(0);
     for (const e of allEvents) {
       for (let m = 0; m < 12; m++) {
-        if (getOccurrenceDatesInMonth(e, year, m).length > 0) counts[m]++;
+        counts[m] += getOccurrenceDatesInMonth(e, year, m).length;
       }
     }
     return counts;
   }, [allEvents, year]);
 
-  // ── Day counts (events prop — already filtered to this month) ─────────────
+  const yearCount = useMemo(
+    () => monthCounts.reduce((a, b) => a + b, 0),
+    [monthCounts],
+  );
+
+  // ── Day occurrence counts (events — already filtered to this month) ────────
   const eventDayCounts = useMemo(() => {
     const counts = new Map<string, number>();
     if (selectedMonth === null) return counts;
@@ -134,14 +134,17 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
     [year, selectedMonth],
   );
 
-  // Preview: live drag range or committed range
-  const preview: DateRange | null = dragPreview ?? dateRange;
+  // Preview: drag preview during drag; committed selection only when a day was
+  // explicitly selected. When just a month is selected (no day), preview = null
+  // so no days are highlighted.
+  const preview: DateRange | null = dragPreview ?? (daySelectionActive ? dateRange : null);
 
   // ── Year navigation ────────────────────────────────────────────────────────
 
   function changeYear(newYear: number) {
     setYear(newYear);
     setSelectedMonth(null);
+    setDaySelectionActive(false);
     setAnchorDate(null);
     isDraggingRef.current = false;
     anchorRef.current     = null;
@@ -153,6 +156,7 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
   // ── Month toggle ───────────────────────────────────────────────────────────
 
   function handleMonthToggle(m: number) {
+    setDaySelectionActive(false);
     setAnchorDate(null);
     isDraggingRef.current = false;
     anchorRef.current     = null;
@@ -175,14 +179,15 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
       if (anchorDate) {
         const start = anchorDate <= day ? anchorDate : day;
         const end   = anchorDate <= day ? day         : anchorDate;
+        setDaySelectionActive(true);
         onDateRangeChange({ start, end });
       } else {
         setAnchorDate(day);
+        setDaySelectionActive(true);
         onDateRangeChange({ start: day, end: day });
       }
       return;
     }
-    // Write to refs immediately — no batching delay, always readable in mouseup
     isDraggingRef.current = true;
     anchorRef.current     = day;
     hoverRef.current      = day;
@@ -199,8 +204,7 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
     });
   }
 
-  // Commit selection — reads refs, not state, so always sees current values
-  // even when mouseup fires in the same browser task as mousedown.
+  // Commit selection — reads refs so always current regardless of render timing.
   function handleContainerMouseUp() {
     if (!isDraggingRef.current || !anchorRef.current) return;
     const anchor = anchorRef.current;
@@ -214,50 +218,46 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
     const start   = anchor <= hover ? anchor : hover;
     const endDate = anchor <= hover ? hover  : anchor;
 
-    // Toggle: re-clicking the already-selected single day → revert to month range
+    // Toggle: re-clicking the already-selected single day → clear day selection
     if (
+      daySelectionActive &&
       isSameDay(start, endDate) &&
       dateRange &&
       isSameDay(dateRange.start, dateRange.end) &&
       isSameDay(start, dateRange.start)
     ) {
+      setDaySelectionActive(false);
+      setAnchorDate(null);
       if (selectedMonth !== null) {
         onDateRangeChange({
           start: new Date(year, selectedMonth, 1),
           end:   new Date(year, selectedMonth + 1, 0),
         });
-      } else {
-        onDateRangeChange(null);
       }
-      setAnchorDate(null);
     } else {
+      setDaySelectionActive(true);
       setAnchorDate(start);
       onDateRangeChange({ start, end: endDate });
     }
   }
 
-  // Clear day selection → revert to month range (keep month selected)
+  // Clear: revert to month range (or year range if no month selected)
   function handleClear() {
-    if (selectedMonth !== null) {
-      onDateRangeChange({ start: new Date(year, selectedMonth, 1), end: new Date(year, selectedMonth + 1, 0) });
-    } else {
-      onDateRangeChange(null);
-    }
+    setDaySelectionActive(false);
     setAnchorDate(null);
     isDraggingRef.current = false;
     anchorRef.current     = null;
     hoverRef.current      = null;
     setDragPreview(null);
+    if (selectedMonth !== null) {
+      onDateRangeChange({ start: new Date(year, selectedMonth, 1), end: new Date(year, selectedMonth + 1, 0) });
+    } else {
+      onDateRangeChange(null);
+    }
   }
 
-  // Show "Clear" only when a specific day range is active (not the whole month)
-  const isDaySelected =
-    dateRange !== null &&
-    selectedMonth !== null &&
-    !(
-      isSameDay(dateRange.start, new Date(year, selectedMonth, 1)) &&
-      isSameDay(dateRange.end, new Date(year, selectedMonth + 1, 0))
-    );
+  // "Clear" shown only when the user has explicitly selected specific days
+  const isDaySelected = daySelectionActive && selectedMonth !== null;
 
   const isActiveDrag = !!dragPreview;
 
@@ -285,7 +285,7 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
       onMouseUp={handleContainerMouseUp}
       onMouseLeave={handleContainerMouseUp}
     >
-      {/* Year nav — compact, left-aligned, not stretched */}
+      {/* Year nav — compact, left-aligned */}
       <div className="inline-flex items-center gap-1 mb-1">
         <button
           type="button"
@@ -367,46 +367,53 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
               inRange = !isStart && !isEnd && day > preview.start && day < preview.end;
             }
 
-            let bg: string;
-            let color: string | undefined;
-            let fontWeight = "500";
+            const isSelected = isStart || isEnd || inRange;
 
-            if (isStart || isEnd) {
-              bg         = hex;
-              color      = "#ffffff";
-              fontWeight = "700";
-            } else if (inRange) {
-              bg = hex + "50";
-            } else if (hasEvents) {
-              bg = hex + "30";
-            } else {
-              bg = "transparent";
-            }
+            // Selection box: faint indigo wash on all selected cells;
+            // border ring on start/end to draw the box boundary.
+            // Event colour only shown for days not inside a selection.
+            const containerBg = isSelected ? "rgba(99,102,241,0.08)" : undefined;
+            const buttonBg    = !isSelected && hasEvents ? hex + "30" : "transparent";
 
-            const showConnector = inRange || isStart || isEnd;
+            const isSingleDay = preview
+              ? isSameDay(preview.start, preview.end) && isStart && isEnd
+              : false;
 
-            // Inline count: "15" or "15 (3)"
-            const dayLabel = hasEvents ? `${day.getDate()} (${count})` : String(day.getDate());
+            const buttonRing =
+              isStart || isEnd
+                ? isSingleDay
+                  ? "ring-1 ring-inset ring-indigo-300 rounded"
+                  : isStart
+                    ? "ring-1 ring-inset ring-indigo-300 rounded-l"
+                    : "ring-1 ring-inset ring-indigo-300 rounded-r"
+                : "";
+
+            const dayLabel = hasEvents
+              ? `${day.getDate()} (${count})`
+              : String(day.getDate());
 
             return (
               <div
                 key={idx}
                 className="relative"
-                style={{ backgroundColor: showConnector ? hex + "18" : undefined }}
+                style={{ backgroundColor: containerBg }}
               >
                 <button
                   type="button"
                   onMouseDown={(e) => handleDayMouseDown(day, e)}
                   onMouseEnter={() => handleDayMouseEnter(day)}
-                  aria-label={`${day.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}${hasEvents ? `, ${count} event${count !== 1 ? "s" : ""}` : ""}${isStart || isEnd || inRange ? ", selected" : ""}`}
+                  aria-label={`${day.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}${hasEvents ? `, ${count} event${count !== 1 ? "s" : ""}` : ""}${isSelected ? ", selected" : ""}`}
                   className={`relative z-10 w-full text-center text-xs py-0.5 rounded transition leading-none ${
                     isToday ? "ring-1 ring-inset ring-gray-400" : ""
-                  } ${
-                    !hasEvents && !isStart && !isEnd && !inRange
+                  } ${buttonRing} ${
+                    !hasEvents && !isSelected
                       ? "opacity-25"
                       : "cursor-pointer hover:opacity-80"
                   }`}
-                  style={{ backgroundColor: bg, color, fontWeight }}
+                  style={{
+                    backgroundColor: buttonBg,
+                    fontWeight: isStart || isEnd ? "600" : "500",
+                  }}
                 >
                   {dayLabel}
                 </button>

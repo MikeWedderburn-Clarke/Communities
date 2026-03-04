@@ -6,6 +6,10 @@ All notable changes to this project are documented here.
 
 ## 2026-03-04
 
+- Calendar: year/month counts now show total occurrence count (not unique event count) and reflect the active status filter — `statusFilteredEvents` (status-filtered, not date-filtered) replaces raw `allEvents` as the counting basis; `yearCount` derived as sum of `monthCounts` avoiding a separate pass
+- Calendar: selecting a month no longer pre-selects all days — the day grid renders with event markers but no selection box until the user explicitly clicks or drags; events for the whole month are shown; `daySelectionActive` state tracks whether an explicit day selection exists
+- Calendar: day range selection replaced solid colour highlighting with a light box — selected cells get a faint indigo wash (`rgba(99,102,241,0.08)`) from the container div; start and end cells get a light `ring-indigo-300` ring; event-day colours preserved only for unselected cells; no white text override
+
 - Event calendar redesign: year nav replaced with compact `‹ 2026 (45) ›` chevron display (left-aligned, not stretched) showing event count for that year; months default to unselected (all-year view); each month pill shows its event count from `allEvents` and is dimmed when zero; clicking a month selects it (map + tree filter to that month), clicking again deselects it and reverts to year range; day grid only renders when a month is selected; each day shows inline event count in brackets e.g. `15 (3)`; "Clear" button only appears when a specific day range is active (not the whole month), reverting to month range; `allEvents` prop added to `EventCalendar` for year/month counting independent of the date-filtered `events` prop
 - Fix: day selection in calendar now works correctly — drag state moved to refs to prevent stale-closure bug where `mouseup` fired before React re-rendered from `mousedown`, causing single-click selections to be silently dropped
 - Fix: calendar hydration error resolved — `todayKey` now computed client-side only via `useEffect` instead of during SSR render, eliminating server/client mismatch on the "today" ring highlight
