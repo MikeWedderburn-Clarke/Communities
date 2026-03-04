@@ -6,11 +6,12 @@ import L from "leaflet";
 import { BreadcrumbNav } from "./breadcrumbs";
 import { normalizeCityName } from "@/lib/city-utils";
 import { getContinent } from "@/lib/location-hierarchy";
-import { isEventFresh } from "@/lib/event-utils";
+import { isEventFresh, countOccurrencesInRange } from "@/lib/event-utils";
 import { DAY_HEX, getEventDay } from "@/lib/day-utils";
 import type { EventSummary } from "@/types";
 import type { DrillState } from "./events-content";
 import type { DateRange } from "./event-calendar";
+import type { CountMode } from "./events-content";
 
 import "leaflet/dist/leaflet.css";
 
@@ -57,9 +58,10 @@ interface Props {
   height?: number | string;
   /** When true: no outer mt-6 wrapper, no BreadcrumbNav, fills container height */
   embedded?: boolean;
+  countMode?: CountMode;
 }
 
-export function LeafletMap({ events, allEvents, userLastLogin, drill, onDrill, dateRange = null, height = 480, embedded = false }: Props) {
+export function LeafletMap({ events, allEvents, userLastLogin, drill, onDrill, dateRange = null, height = 480, embedded = false, countMode = "events" }: Props) {
   // Derive level/activeContinent/activeCountry/activeCity from shared drill state
   const level: Level =
     drill.level === "globe" ? 1 :
@@ -153,21 +155,30 @@ export function LeafletMap({ events, allEvents, userLastLogin, drill, onDrill, d
     const countryCount = new Map<string, number>();
     const continentCount = new Map<string, number>();
     for (const event of events) {
+      const w = countMode === "instances" && dateRange
+        ? countOccurrencesInRange(event, dateRange.start, dateRange.end)
+        : 1;
       const canonicalCity = normalizeCityName(event.location.city) ?? event.location.city;
       const cityKey = `${canonicalCity}||${event.location.country}`;
-      cityCount.set(cityKey, (cityCount.get(cityKey) ?? 0) + 1);
-      countryCount.set(event.location.country, (countryCount.get(event.location.country) ?? 0) + 1);
+      cityCount.set(cityKey, (cityCount.get(cityKey) ?? 0) + w);
+      countryCount.set(event.location.country, (countryCount.get(event.location.country) ?? 0) + w);
       const cont = getContinent(event.location.country);
-      continentCount.set(cont, (continentCount.get(cont) ?? 0) + 1);
+      continentCount.set(cont, (continentCount.get(cont) ?? 0) + w);
     }
     return { filteredCityCount: cityCount, filteredCountryCount: countryCount, filteredContinentCount: continentCount };
-  }, [events]);
+  }, [events, countMode, dateRange]);
 
   const globalCenter = useMemo(() => {
     if (events.length === 0) return [20, 0] as [number, number];
     const pts = events.map((event) => ({ lat: event.location.latitude, lng: event.location.longitude }));
     return centroid(pts);
   }, [events]);
+
+  // Total count across all visible events — respects countMode
+  const totalFilteredCount = useMemo(
+    () => Array.from(filteredContinentCount.values()).reduce((a, b) => a + b, 0),
+    [filteredContinentCount],
+  );
 
   // Single pass for all freshness sets
   const { freshCountries, freshContinents, freshCities } = useMemo(() => {
@@ -208,7 +219,7 @@ export function LeafletMap({ events, allEvents, userLastLogin, drill, onDrill, d
     const items: { label: string; count?: number; action?: () => void }[] = [];
     items.push({
       label: "Globe",
-      count: events.length,
+      count: totalFilteredCount,
       action: level === 1 ? undefined : () => onDrill({ level: "globe" }),
     });
     if (activeContinent) {
@@ -233,7 +244,7 @@ export function LeafletMap({ events, allEvents, userLastLogin, drill, onDrill, d
       });
     }
     return items;
-  }, [level, activeContinent, activeCountry, activeCity, events.length, filteredContinentCount, filteredCountryCount, filteredCityCount, onDrill]);
+  }, [level, activeContinent, activeCountry, activeCity, totalFilteredCount, filteredContinentCount, filteredCountryCount, filteredCityCount, onDrill]);
 
   const countriesForActiveContinent = activeContinent
     ? countryEntries.filter((c) => c.continent === activeContinent)

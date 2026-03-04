@@ -91,8 +91,12 @@ export function getContinent(country: string): string {
  * Group a flat array of events into a Continent → Country → City → Venue hierarchy.
  * Sorted alphabetically at every level.
  * Each group includes lat/lng computed as the average of its children.
+ *
+ * @param weightFn Optional function returning the numeric weight for each event.
+ *                 Defaults to () => 1 (unique-event counting).
+ *                 Pass a function returning occurrence counts for "instances" mode.
  */
-export function buildLocationHierarchy(events: EventSummary[]): LocationHierarchy {
+export function buildLocationHierarchy(events: EventSummary[], weightFn: (e: EventSummary) => number = () => 1): LocationHierarchy {
   // continent → country → city → venue → events
   const continentMap = new Map<string, Map<string, Map<string, Map<string, EventSummary[]>>>>();
 
@@ -152,7 +156,7 @@ export function buildLocationHierarchy(events: EventSummary[]): LocationHierarch
               if (dayDiff !== 0) return dayDiff;
               return getPrimaryDate(a).localeCompare(getPrimaryDate(b));
             }),
-            eventCount: venueEvents.length,
+            eventCount: venueEvents.reduce((sum, e) => sum + weightFn(e), 0),
           });
         }
 

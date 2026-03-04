@@ -3,10 +3,10 @@
 import { useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import type { EventSummary } from "@/types";
-import { isEventNew, isEventUpdated, hasOccurrenceInRange } from "@/lib/event-utils";
+import { isEventNew, isEventUpdated, hasOccurrenceInRange, countOccurrencesInRange } from "@/lib/event-utils";
 import { toDateString } from "@/lib/date-utils";
 import { type DateRange } from "./event-calendar";
-import { buildLocationHierarchy } from "@/lib/location-hierarchy";
+import { buildLocationHierarchy, getContinent } from "@/lib/location-hierarchy";
 import { normalizeCityName } from "@/lib/city-utils";
 import { EventsCombined } from "./events-combined";
 
@@ -18,6 +18,7 @@ export type DrillState =
   | { level: "venue"; country: string; city: string; venue: string };
 
 type FilterKey = "all" | "new" | "updated" | "full" | "past" | "booked" | "toPay";
+export type CountMode = "events" | "instances";
 
 interface Props {
   events: EventSummary[];
@@ -76,6 +77,11 @@ export function EventsContent({ events, homeCity, lastLogin, userId }: Props) {
     return f && validKeys.includes(f) ? f : null;
   }, [searchParams]);
 
+  // ── Count mode derived from URL ────────────────────────────────────────────
+  const countMode: CountMode = useMemo(() => {
+    return searchParams.get("mode") === "instances" ? "instances" : "events";
+  }, [searchParams]);
+
   // ── URL update helper ──────────────────────────────────────────────────────
   function updateParams(updates: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams.toString());
@@ -104,31 +110,52 @@ export function EventsContent({ events, homeCity, lastLogin, userId }: Props) {
     updateParams({ filter: activeFilter === f ? null : f });
   }
 
-  // ── Pre-status base: date-range filtered ───────────────────────────────────
+  // ── Location filter: restrict events to the drilled-into continent/country/city ──
+  const locationFilteredEvents = useMemo(() => {
+    if (locationDrill.level === "globe") return events;
+    if (locationDrill.level === "continent") {
+      return events.filter((e) => getContinent(e.location.country) === locationDrill.continent);
+    }
+    if (locationDrill.level === "country") {
+      return events.filter((e) => e.location.country === locationDrill.country);
+    }
+    // city or venue
+    const { country, city } = locationDrill as { country: string; city: string };
+    return events.filter(
+      (e) =>
+        e.location.country === country &&
+        (normalizeCityName(e.location.city) ?? e.location.city) === city,
+    );
+  }, [events, locationDrill]);
+
+  // ── Pre-status base: location+date-range filtered ─────────────────────────
   const preStatusBase = useMemo(() => {
-    if (!dateRange) return events;
-    return events.filter((e) => hasOccurrenceInRange(e, dateRange.start, dateRange.end));
-  }, [events, dateRange]);
+    if (!dateRange) return locationFilteredEvents;
+    return locationFilteredEvents.filter((e) => hasOccurrenceInRange(e, dateRange.start, dateRange.end));
+  }, [locationFilteredEvents, dateRange]);
 
   // ── Filter counts — single pass ────────────────────────────────────────────
   const filterCounts = useMemo(() => {
     const counts = { upcoming: 0, all: 0, new: 0, updated: 0, full: 0, past: 0, booked: 0, toPay: 0 };
     for (const e of preStatusBase) {
-      counts.all++;
+      const w = countMode === "instances" && dateRange
+        ? countOccurrencesInRange(e, dateRange.start, dateRange.end)
+        : 1;
+      counts.all += w;
       if (e.isPast) {
-        counts.past++;
+        counts.past += w;
       } else {
-        counts.upcoming++;
-        if (isEventNew(e, lastLogin))             counts.new++;
-        if (isEventUpdated(e, lastLogin))         counts.updated++;
-        if (e.isFull)                             counts.full++;
-        if (e.userRsvp !== null)                  counts.booked++;
+        counts.upcoming += w;
+        if (isEventNew(e, lastLogin))             counts.new += w;
+        if (isEventUpdated(e, lastLogin))         counts.updated += w;
+        if (e.isFull)                             counts.full += w;
+        if (e.userRsvp !== null)                  counts.booked += w;
         if (e.userRsvp !== null && (e.costAmount ?? 0) > 0 && e.userRsvp.paymentStatus === null)
-          counts.toPay++;
+          counts.toPay += w;
       }
     }
     return counts;
-  }, [preStatusBase, lastLogin]);
+  }, [preStatusBase, lastLogin, countMode, dateRange]);
 
   // ── Filtered events ────────────────────────────────────────────────────────
   const filteredEvents = useMemo(() => {
@@ -146,18 +173,19 @@ export function EventsContent({ events, homeCity, lastLogin, userId }: Props) {
 
   // Status-filtered but NOT date-filtered — used for calendar year/month counts
   // so the counts reflect the active status filter across all time periods.
+  // Also location-filtered to match the current drill state.
   const statusFilteredEvents = useMemo(() => {
     switch (activeFilter) {
-      case "all":     return events;
-      case "new":     return events.filter((e) => !e.isPast && isEventNew(e, lastLogin));
-      case "updated": return events.filter((e) => !e.isPast && isEventUpdated(e, lastLogin));
-      case "full":    return events.filter((e) => e.isFull);
-      case "past":    return events.filter((e) => e.isPast);
-      case "booked":  return events.filter((e) => !e.isPast && e.userRsvp !== null);
-      case "toPay":   return events.filter((e) => !e.isPast && e.userRsvp !== null && (e.costAmount ?? 0) > 0 && e.userRsvp.paymentStatus === null);
-      default:        return events.filter((e) => !e.isPast);
+      case "all":     return locationFilteredEvents;
+      case "new":     return locationFilteredEvents.filter((e) => !e.isPast && isEventNew(e, lastLogin));
+      case "updated": return locationFilteredEvents.filter((e) => !e.isPast && isEventUpdated(e, lastLogin));
+      case "full":    return locationFilteredEvents.filter((e) => e.isFull);
+      case "past":    return locationFilteredEvents.filter((e) => e.isPast);
+      case "booked":  return locationFilteredEvents.filter((e) => !e.isPast && e.userRsvp !== null);
+      case "toPay":   return locationFilteredEvents.filter((e) => !e.isPast && e.userRsvp !== null && (e.costAmount ?? 0) > 0 && e.userRsvp.paymentStatus === null);
+      default:        return locationFilteredEvents.filter((e) => !e.isPast);
     }
-  }, [events, activeFilter, lastLogin]);
+  }, [locationFilteredEvents, activeFilter, lastLogin]);
 
   type FilterDef = { key: FilterKey; label: string; selectedCls: string; loggedInOnly?: boolean };
 
@@ -177,7 +205,7 @@ export function EventsContent({ events, homeCity, lastLogin, userId }: Props) {
   return (
     <>
       {/* Show all / reset — clears all filters and returns to /events */}
-      <div className="mt-6 flex items-center">
+      <div className="mt-6 flex items-center justify-between">
         <button
           type="button"
           onClick={() => router.push(pathname)}
@@ -189,6 +217,32 @@ export function EventsContent({ events, homeCity, lastLogin, userId }: Props) {
         >
           Show all ({events.length})
         </button>
+
+        {/* Count mode toggle */}
+        <div className="flex items-center gap-1 rounded-full border border-gray-300 bg-white p-0.5 text-xs font-medium shadow-sm">
+          <button
+            type="button"
+            onClick={() => updateParams({ mode: null })}
+            className={`rounded-full px-2.5 py-1 transition ${
+              countMode === "events"
+                ? "bg-indigo-600 text-white shadow-sm"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Unique events
+          </button>
+          <button
+            type="button"
+            onClick={() => updateParams({ mode: "instances" })}
+            className={`rounded-full px-2.5 py-1 transition ${
+              countMode === "instances"
+                ? "bg-indigo-600 text-white shadow-sm"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            All instances
+          </button>
+        </div>
       </div>
 
       {/* Status filter pills */}
@@ -232,6 +286,7 @@ export function EventsContent({ events, homeCity, lastLogin, userId }: Props) {
         onDrill={handleDrill}
         dateRange={dateRange}
         onDateRangeChange={handleDateRangeChange}
+        countMode={countMode}
       />
     </>
   );

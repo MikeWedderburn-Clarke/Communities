@@ -5,12 +5,12 @@ import Link from "next/link";
 import { useMemo, type ReactNode } from "react";
 import { DAY_HEX, getEventDay } from "@/lib/day-utils";
 import { buildLocationHierarchy, getContinent } from "@/lib/location-hierarchy";
-import { isEventNew, isEventUpdated } from "@/lib/event-utils";
+import { isEventNew, isEventUpdated, countOccurrencesInRange } from "@/lib/event-utils";
 import { toDateString } from "@/lib/date-utils";
 import { RoleBadges } from "@/components/role-badges";
 import { EventCalendar, type DateRange } from "./event-calendar";
 import type { EventSummary } from "@/types";
-import type { DrillState } from "./events-content";
+import type { DrillState, CountMode } from "./events-content";
 
 const LeafletMap = dynamic(
   () => import("./leaflet-map").then((m) => m.LeafletMap),
@@ -32,6 +32,7 @@ interface Props {
   onDrill: (d: DrillState) => void;
   dateRange: DateRange | null;
   onDateRangeChange: (r: DateRange | null) => void;
+  countMode: CountMode;
 }
 
 // ── Shared tree UI primitives ─────────────────────────────────────────────────
@@ -173,7 +174,7 @@ function EventRow({ event, lastLogin, dateRange }: EventRowProps) {
 
 // ── Main combined view ────────────────────────────────────────────────────────
 
-export function EventsCombined({ events, allEvents, lastLogin, drill, onDrill, dateRange, onDateRangeChange }: Props) {
+export function EventsCombined({ events, allEvents, lastLogin, drill, onDrill, dateRange, onDateRangeChange, countMode }: Props) {
   // Derive expansion state from drill prop
   const expandedContinent: string | null =
     drill.level === "continent" ? drill.continent
@@ -189,8 +190,16 @@ export function EventsCombined({ events, allEvents, lastLogin, drill, onDrill, d
   const expandedCity: string | null =
     drill.level === "city" ? drill.city : null;
 
-  // events prop is already date+status filtered (from events-content)
-  const hierarchy = useMemo(() => buildLocationHierarchy(events), [events]);
+  // weightFn: in "instances" mode, count occurrences within the active dateRange
+  const weightFn = useMemo<(e: EventSummary) => number>(() => {
+    if (countMode === "instances" && dateRange) {
+      return (e) => countOccurrencesInRange(e, dateRange.start, dateRange.end);
+    }
+    return () => 1;
+  }, [countMode, dateRange]);
+
+  // events prop is already date+status+location filtered (from events-content)
+  const hierarchy = useMemo(() => buildLocationHierarchy(events, weightFn), [events, weightFn]);
 
   function toggleContinent(continent: string) {
     if (expandedContinent === continent) {
@@ -347,6 +356,7 @@ export function EventsCombined({ events, allEvents, lastLogin, drill, onDrill, d
           allEvents={allEvents}
           dateRange={dateRange}
           onDateRangeChange={onDateRangeChange}
+          countMode={countMode}
         />
         <div className="flex-1 min-h-0">
           <LeafletMap
@@ -357,6 +367,7 @@ export function EventsCombined({ events, allEvents, lastLogin, drill, onDrill, d
             onDrill={onDrill}
             dateRange={dateRange}
             embedded
+            countMode={countMode}
           />
         </div>
       </div>

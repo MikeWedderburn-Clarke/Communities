@@ -84,6 +84,30 @@ export function hasOccurrenceInRange(
 }
 
 /**
+ * Returns the total number of occurrences of the event within [rangeStart, rangeEnd] inclusive.
+ * Iterates month-by-month using getOccurrenceDatesInMonth and clips to range boundaries.
+ */
+export function countOccurrencesInRange(
+  event: Pick<EventSummary, "dateTime" | "recurrence">,
+  rangeStart: Date,
+  rangeEnd: Date,
+): number {
+  const startD = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), rangeStart.getDate());
+  const endD   = new Date(rangeEnd.getFullYear(),   rangeEnd.getMonth(),   rangeEnd.getDate());
+  let total = 0;
+  let year  = startD.getFullYear();
+  let month = startD.getMonth();
+  while (year < endD.getFullYear() || (year === endD.getFullYear() && month <= endD.getMonth())) {
+    for (const d of getOccurrenceDatesInMonth(event, year, month)) {
+      if (d >= startD && d <= endD) total++;
+    }
+    month++;
+    if (month > 11) { month = 0; year++; }
+  }
+  return total;
+}
+
+/**
  * Returns all calendar dates within the given year/month on which the event
  * has an occurrence. Used to highlight days in the EventCalendar grid.
  */

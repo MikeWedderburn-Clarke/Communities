@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { DAY_HEX } from "@/lib/day-utils";
 import { getOccurrenceDatesInMonth } from "@/lib/event-utils";
 import type { EventSummary } from "@/types";
+import type { CountMode } from "./events-content";
 
 export interface DateRange {
   start: Date;
@@ -51,9 +52,10 @@ interface Props {
   allEvents: EventSummary[];
   dateRange: DateRange | null;
   onDateRangeChange: (r: DateRange | null) => void;
+  countMode: CountMode;
 }
 
-export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange }: Props) {
+export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange, countMode }: Props) {
   const currentYear = new Date().getFullYear();
 
   // todayKey computed client-side only — avoids SSR/client hydration mismatch.
@@ -100,16 +102,17 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
   }, []);
 
   // ── Month occurrence counts (allEvents, all 12 months) ────────────────────
-  // Counts total occurrences (not unique events) within the status filter.
+  // In "instances" mode: total occurrences. In "events" mode: unique events with ≥1 occurrence.
   const monthCounts = useMemo(() => {
     const counts = new Array<number>(12).fill(0);
     for (const e of allEvents) {
       for (let m = 0; m < 12; m++) {
-        counts[m] += getOccurrenceDatesInMonth(e, year, m).length;
+        const n = getOccurrenceDatesInMonth(e, year, m).length;
+        counts[m] += countMode === "instances" ? n : (n > 0 ? 1 : 0);
       }
     }
     return counts;
-  }, [allEvents, year]);
+  }, [allEvents, year, countMode]);
 
   const yearCount = useMemo(
     () => monthCounts.reduce((a, b) => a + b, 0),
@@ -117,6 +120,8 @@ export function EventCalendar({ events, allEvents, dateRange, onDateRangeChange 
   );
 
   // ── Day occurrence counts (events — already filtered to this month) ────────
+  // Day counts are the same regardless of countMode: each day's count is how many
+  // events occur on that specific date, which does not aggregate across a month.
   const eventDayCounts = useMemo(() => {
     const counts = new Map<string, number>();
     if (selectedMonth === null) return counts;
