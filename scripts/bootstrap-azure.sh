@@ -10,11 +10,12 @@
 #
 # What it creates:
 #   1. Resource group:         rg-ayc (UK South)
-#   2. App Registration:       gh-ayc-deploy  (identity used by GitHub Actions)
-#   3. Service principal for the app registration
-#   4. Owner role on rg-ayc    (Owner required — Bicep creates AcrPull role assignments)
-#   5. OIDC federated credential scoped to MikeWedderburn-Clarke/Communities main branch
-#   6. Generates DB_ADMIN_PASSWORD and AUTH_SECRET
+#   2. Resource providers:     ContainerRegistry, DBforPostgreSQL, App, OperationalInsights
+#   3. App Registration:       gh-ayc-deploy  (identity used by GitHub Actions)
+#   4. Service principal for the app registration
+#   5. Owner role on rg-ayc    (Owner required — Bicep creates AcrPull role assignments)
+#   6. OIDC federated credential scoped to MikeWedderburn-Clarke/Communities main branch
+#   7. Generates DB_ADMIN_PASSWORD and AUTH_SECRET
 #
 # Output: copy-paste table of all GitHub secrets and variables.
 
@@ -70,6 +71,16 @@ echo ""
 echo "▶ Creating resource group: ${RG} (${LOCATION})..."
 az group create --name "${RG}" --location "${LOCATION}" --output none
 echo "  ✓ Resource group ready"
+echo ""
+
+# ─── Resource providers ───────────────────────────────────────────────────────
+# Required on fresh subscriptions. Idempotent — safe to re-run.
+echo "▶ Registering resource providers (one-time, subscription-level)..."
+az provider register --namespace Microsoft.ContainerRegistry --wait
+az provider register --namespace Microsoft.DBforPostgreSQL --wait
+az provider register --namespace Microsoft.App --wait
+az provider register --namespace Microsoft.OperationalInsights --wait
+echo "  ✓ Providers registered"
 echo ""
 
 # ─── App Registration ─────────────────────────────────────────────────────────
