@@ -1,6 +1,8 @@
 /*
   Azure Container Apps environment + app.
-  The app uses a system-assigned managed identity to pull images from ACR.
+  Uses a user-assigned managed identity for ACR pull so the role assignment
+  is created BEFORE the container app — eliminating the race condition that
+  causes "Operation expired" with system-assigned identity.
   Ingress is HTTPS-only on port 3000. Min replicas = 0 (scales to zero).
 */
 param location string
@@ -33,7 +35,30 @@ var entraEnv = hasEntra ? [
   { name: 'AUTH_ENTRA_CLIENT_SECRET', secretRef: 'entra-client-secret' }
 ] : []
 
-// Container Apps environment (consumption plan)
+// ── User-assigned managed identity ────────────────────────────────────────────
+// Created first so AcrPull can be assigned before the container app exists,
+// eliminating the race condition with system-assigned identity.
+resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: '${appName}-identity'
+  location: location
+}
+
+// Grant AcrPull to the identity BEFORE the container app is created.
+// Built-in AcrPull role definition ID: 7f951dda-4ed3-4680-a7ca-43fe172d538d
+resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(registryId, identity.id, '7f951dda-4ed3-4680-a7ca-43fe172d538d')
+  scope: resourceGroup()
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      '7f951dda-4ed3-4680-a7ca-43fe172d538d'
+    )
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// ── Container Apps environment (consumption plan) ─────────────────────────────
 resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: '${appName}-env'
   location: location
@@ -47,12 +72,18 @@ resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   }
 }
 
-// Container App
+// ── Container App ─────────────────────────────────────────────────────────────
+// dependsOn acrPullRole ensures the role is propagated before the app starts
+// its first revision — avoiding the "Operation expired" provisioning error.
 resource app 'Microsoft.App/containerApps@2024-03-01' = {
   name: appName
   location: location
+  dependsOn: [acrPullRole]
   identity: {
-    type: 'SystemAssigned'
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${identity.id}': {}
+    }
   }
   properties: {
     managedEnvironmentId: environment.id
@@ -66,7 +97,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
       registries: [
         {
           server: registryLoginServer
-          identity: 'system'
+          identity: identity.id
         }
       ]
       secrets: concat([
@@ -101,21 +132,6 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
-// Grant the Container App's managed identity the AcrPull role on the registry
-// Built-in AcrPull role definition ID: 7f951dda-4ed3-4680-a7ca-43fe172d538d
-resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(registryId, app.id, '7f951dda-4ed3-4680-a7ca-43fe172d538d')
-  scope: resourceGroup()
-  properties: {
-    roleDefinitionId: subscriptionResourceId(
-      'Microsoft.Authorization/roleDefinitions',
-      '7f951dda-4ed3-4680-a7ca-43fe172d538d'
-    )
-    principalId: app.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
 output appFqdn string = app.properties.configuration.ingress.fqdn
 output appUrl string = 'https://${app.properties.configuration.ingress.fqdn}'
-output principalId string = app.identity.principalId
+output principalId string = identity.properties.principalId
