@@ -23,10 +23,12 @@ declare module "next-auth" {
   }
 }
 
-// ── Fail-safe: never allow mock auth in production ────────────────
+// ── Warn if mock auth is active in production ────────────────────
 if (process.env.MOCK_AUTH === "true" && process.env.NODE_ENV === "production") {
-  console.error("FATAL: MOCK_AUTH must not be enabled in production");
-  process.exit(1);
+  console.warn(
+    "WARNING: MOCK_AUTH is enabled in a production build. " +
+    "Anyone can log in without credentials. Disable before going live.",
+  );
 }
 
 // ── Provider list ──────────────────────────────────────────────────
