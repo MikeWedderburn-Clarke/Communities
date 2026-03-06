@@ -91,8 +91,6 @@ describe("getPublicProfile", () => {
   });
 
   it("hides social links when visibility is 'followers' and viewer doesn't follow", async () => {
-    await db.update(schema.users).set({ profileVisibility: "followers" }).where(schema.users.id.getSQL ? undefined as never : undefined).catch(() => {});
-    // Use drizzle properly
     const { eq } = await import("drizzle-orm");
     await db.update(schema.users).set({ profileVisibility: "followers" }).where(eq(schema.users.id, "u1"));
     const profile = await getPublicProfile(db, "u1", "u2");
