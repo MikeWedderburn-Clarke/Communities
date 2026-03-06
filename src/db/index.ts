@@ -17,6 +17,9 @@ export const pool =
   globalThis.__db_pool ??
   new Pool({
     connectionString: process.env.DATABASE_URL,
+    max: 5,
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 5_000,
     ...(process.env.NODE_ENV === "production" && { ssl: true }),
   });
 

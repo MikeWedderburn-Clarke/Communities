@@ -150,6 +150,14 @@ export async function createTestDb(): Promise<Db> {
       created_at TEXT NOT NULL
     );
     CREATE UNIQUE INDEX event_interests_event_user_unique ON event_interests(event_id, user_id);
+    CREATE TABLE scraper_runs (
+      id TEXT PRIMARY KEY NOT NULL,
+      source_id TEXT NOT NULL,
+      last_scraped_url TEXT,
+      last_run_at TEXT NOT NULL,
+      events_added INTEGER NOT NULL DEFAULT 0,
+      events_skipped INTEGER NOT NULL DEFAULT 0
+    );
   `);
 
   // Attach the raw PGlite client so test afterAll hooks can call client.close().
@@ -164,6 +172,7 @@ export async function createTestDb(): Promise<Db> {
  * across many tests (avoiding the heavy per-test WASM allocation).
  */
 export async function resetDb(db: Db): Promise<void> {
+  await db.delete(schema.scraperRuns);
   await db.delete(schema.teacherSplits);
   await db.delete(schema.bookings);
   await db.delete(schema.ticketTypeEvents);

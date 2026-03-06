@@ -9,7 +9,9 @@ export default async function LoginPage({
   searchParams: Promise<{ redirect?: string }>;
 }) {
   const params = await searchParams;
-  const redirectTo = params.redirect ?? "/events";
+  // Prevent open-redirect: only allow relative paths
+  const raw = params.redirect ?? "/events";
+  const redirectTo = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/events";
 
   const isMock = process.env.MOCK_AUTH === "true";
   const hasEntra = Boolean(process.env.AUTH_ENTRA_CLIENT_ID);

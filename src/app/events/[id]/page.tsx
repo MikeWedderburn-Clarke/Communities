@@ -14,6 +14,7 @@ import { db } from "@/db";
 import { RsvpForm } from "./rsvp-form";
 import { InterestButton } from "./interest-button";
 import { TicketSelector } from "@/components/ticket-selector";
+import Image from "next/image";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -96,12 +97,14 @@ export default async function EventDetailPage({
 
         {/* Poster image */}
         {event.posterUrl && (
-          <div className="mt-4">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+          <div className="relative mt-4 aspect-video w-full overflow-hidden rounded-lg">
+            <Image
               src={event.posterUrl}
               alt={`${event.title} poster`}
-              className="w-full rounded-lg object-cover max-h-96"
+              fill
+              className="object-cover"
+              sizes="(max-width: 768px) 100vw, 768px"
+              priority
             />
           </div>
         )}

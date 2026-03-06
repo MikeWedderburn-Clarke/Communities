@@ -96,6 +96,7 @@ export const rsvps = pgTable("rsvps", {
   //   "rsvps_occurrence_unique"     ON (event_id, user_id, occurrence_date) WHERE occurrence_date IS NOT NULL
   index("rsvps_no_occurrence_unique").on(table.eventId, table.userId),
   index("rsvps_occurrence_unique").on(table.eventId, table.userId, table.occurrenceDate),
+  index("rsvps_user_id_idx").on(table.userId),
 ]));
 
 // ── Event Groups ─────────────────────────────────────────────────────
@@ -125,6 +126,7 @@ export const eventGroupMembers = pgTable("event_group_members", {
   sortOrder: integer("sort_order").notNull().default(0),
 }, (t) => ([
   uniqueIndex("egm_group_event_unique").on(t.groupId, t.eventId),
+  index("egm_event_id_idx").on(t.eventId),
 ]));
 
 // ── Ticket Types ─────────────────────────────────────────────────────
@@ -161,6 +163,7 @@ export const ticketTypeEvents = pgTable("ticket_type_events", {
     .references(() => events.id),
 }, (t) => ([
   uniqueIndex("tte_ticket_event_unique").on(t.ticketTypeId, t.eventId),
+  index("tte_event_id_idx").on(t.eventId),
 ]));
 
 // ── Bookings ─────────────────────────────────────────────────────────
@@ -190,6 +193,8 @@ export const bookings = pgTable("bookings", {
   notes: text("notes"),
 }, (t) => ([
   uniqueIndex("bookings_user_ticket_unique").on(t.userId, t.ticketTypeId),
+  index("bookings_user_id_idx").on(t.userId),
+  index("bookings_ticket_type_id_idx").on(t.ticketTypeId),
 ]));
 
 // ── Teacher Splits ───────────────────────────────────────────────────
@@ -212,6 +217,19 @@ export const teacherSplits = pgTable("teacher_splits", {
   uniqueIndex("ts_ticket_teacher_unique").on(t.ticketTypeId, t.teacherUserId),
 ]));
 
+// ── Scraper Runs ────────────────────────────────────────────────────
+// Tracks when each external source was last scraped, to avoid re-processing
+// the same newsletter posts or event pages.
+
+export const scraperRuns = pgTable("scraper_runs", {
+  id: text("id").primaryKey(),
+  sourceId: text("source_id").notNull(),
+  lastScrapedUrl: text("last_scraped_url"),
+  lastRunAt: text("last_run_at").notNull(),
+  eventsAdded: integer("events_added").notNull().default(0),
+  eventsSkipped: integer("events_skipped").notNull().default(0),
+});
+
 // ── Event Interests ─────────────────────────────────────────────────
 // Lightweight "interested" / watchlist signal. Separate from RSVPs so
 // the RSVP system (with roles, occurrence dates, etc.) stays unchanged.
@@ -226,4 +244,5 @@ export const eventInterests = pgTable("event_interests", {
   createdAt: text("created_at").notNull(),
 }, (table) => ([
   uniqueIndex("event_interests_event_user_unique").on(table.eventId, table.userId),
+  index("event_interests_user_id_idx").on(table.userId),
 ]));

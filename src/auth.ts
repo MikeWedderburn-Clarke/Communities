@@ -23,6 +23,12 @@ declare module "next-auth" {
   }
 }
 
+// ── Fail-safe: never allow mock auth in production ────────────────
+if (process.env.MOCK_AUTH === "true" && process.env.NODE_ENV === "production") {
+  console.error("FATAL: MOCK_AUTH must not be enabled in production");
+  process.exit(1);
+}
+
 // ── Provider list ──────────────────────────────────────────────────
 
 const mockProvider =
