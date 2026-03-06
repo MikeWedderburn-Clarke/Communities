@@ -1,9 +1,9 @@
 name: Scrape External Events
 
 on:
-  schedule:
-    - cron: '0 6 * * 1' # Every Monday at 06:00 UTC
-  workflow_dispatch: # Manual trigger for testing
+  # schedule:
+  #   - cron: '0 6 * * 1' # Every Monday at 06:00 UTC — disabled until ready
+  workflow_dispatch: # Manual trigger only for now
 
 permissions:
   contents: read
