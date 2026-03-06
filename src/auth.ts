@@ -63,6 +63,7 @@ const providers = [mockProvider, entraProvider].filter(Boolean) as Array<
 // ── NextAuth config ────────────────────────────────────────────────
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  trustHost: true,
   providers,
   callbacks: {
     async jwt({ token, user, account }) {
