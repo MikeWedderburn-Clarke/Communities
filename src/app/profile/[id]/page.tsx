@@ -4,6 +4,7 @@ import { Header } from "@/components/header";
 import { getCurrentUser } from "@/lib/auth";
 import { getPublicProfile } from "@/services/users";
 import { db } from "@/db";
+import { RelationshipButton } from "./relationship-button";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export default async function PublicProfilePage({
   }
 
   const { id } = await params;
-  const profile = await getPublicProfile(db, id);
+  const profile = await getPublicProfile(db, id, user.id);
 
   if (!profile) {
     notFound();
@@ -45,6 +46,15 @@ export default async function PublicProfilePage({
         </Link>
 
         <h1 className="mt-4 text-3xl font-bold">{profile.name}</h1>
+
+        {!isOwnProfile && (
+          <div className="mt-4">
+            <RelationshipButton
+              targetUserId={profile.id}
+              currentRelationship={profile.viewerRelationship}
+            />
+          </div>
+        )}
 
         <section className="mt-6">
           {links.length > 0 ? (

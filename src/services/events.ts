@@ -2,6 +2,7 @@ import { eq, and, isNotNull, isNull, sql } from "drizzle-orm";
 import type { Db } from "@/db";
 import * as schema from "@/db/schema";
 import { computeNextOccurrence } from "@/lib/recurrence";
+import { batchCanViewSocialLinks } from "@/services/users";
 import type { EventSummary, EventDetail, RoleCounts, Role, SkillLevel, EventCategory, TeacherRequest, PendingEvent, EventStatus, CreateEventInput, Location, RecurrenceRule } from "@/types";
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -27,16 +28,18 @@ export function aggregateRoles(rsvps: { role: string }[]): RoleCounts {
  * - Anonymous: empty array (handled by caller).
  */
 export function visibleAttendees(
-  rsvps: { showName: boolean; role: string; userName: string; userId: string; isTeaching: boolean; facebookUrl: string | null; instagramUrl: string | null; websiteUrl: string | null; youtubeUrl: string | null; showFacebook: boolean; showInstagram: boolean; showWebsite: boolean; showYoutube: boolean }[],
+  rsvps: { showName: boolean; role: string; userName: string; userId: string; isTeaching: boolean; facebookUrl: string | null; instagramUrl: string | null; websiteUrl: string | null; youtubeUrl: string | null; profileVisibility: string }[],
   viewerUserId: string | null,
-  isAdmin: boolean
+  isAdmin: boolean,
+  canViewSet: Set<string>
 ): { userId: string; name: string; role: Role; hidden: boolean; isTeaching: boolean; socialLinks: { facebook?: string; instagram?: string; website?: string; youtube?: string } }[] {
   function buildSocialLinks(r: typeof rsvps[number]) {
     const links: { facebook?: string; instagram?: string; website?: string; youtube?: string } = {};
-    if (r.showFacebook && r.facebookUrl) links.facebook = r.facebookUrl;
-    if (r.showInstagram && r.instagramUrl) links.instagram = r.instagramUrl;
-    if (r.showWebsite && r.websiteUrl) links.website = r.websiteUrl;
-    if (r.showYoutube && r.youtubeUrl) links.youtube = r.youtubeUrl;
+    const canView = canViewSet.has(r.userId);
+    if (canView && r.facebookUrl) links.facebook = r.facebookUrl;
+    if (canView && r.instagramUrl) links.instagram = r.instagramUrl;
+    if (canView && r.websiteUrl) links.website = r.websiteUrl;
+    if (canView && r.youtubeUrl) links.youtube = r.youtubeUrl;
     return links;
   }
 
@@ -322,10 +325,7 @@ export async function getEventDetail(
       instagramUrl: schema.users.instagramUrl,
       websiteUrl: schema.users.websiteUrl,
       youtubeUrl: schema.users.youtubeUrl,
-      showFacebook: schema.users.showFacebook,
-      showInstagram: schema.users.showInstagram,
-      showWebsite: schema.users.showWebsite,
-      showYoutube: schema.users.showYoutube,
+      profileVisibility: schema.users.profileVisibility,
     })
     .from(schema.rsvps)
     .innerJoin(schema.users, eq(schema.rsvps.userId, schema.users.id))
@@ -334,8 +334,9 @@ export async function getEventDetail(
   const roleCounts = aggregateRoles(rsvpRows);
 
   // Only expose names to logged-in users; admin sees all
+  const canViewSet = await batchCanViewSocialLinks(db, rsvpRows, currentUserId, isAdmin);
   const visible = currentUserId
-    ? visibleAttendees(rsvpRows, currentUserId, isAdmin)
+    ? visibleAttendees(rsvpRows, currentUserId, isAdmin, canViewSet)
     : [];
 
   // Check if current user has RSVP'd
@@ -416,6 +417,16 @@ export async function createOrUpdateRsvp(
         set: { role, showName, isTeaching },
       });
   }
+
+  // Remove any "interested" record now that the user is "going"
+  await db
+    .delete(schema.eventInterests)
+    .where(
+      and(
+        eq(schema.eventInterests.eventId, eventId),
+        eq(schema.eventInterests.userId, userId)
+      )
+    );
 }
 
 export async function deleteRsvp(

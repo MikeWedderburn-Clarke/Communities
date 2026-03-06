@@ -36,7 +36,7 @@ describe("aggregateRoles", () => {
 });
 
 describe("visibleAttendees", () => {
-  const socialDefaults = { facebookUrl: null, instagramUrl: null, websiteUrl: null, youtubeUrl: null, showFacebook: false, showInstagram: false, showWebsite: false, showYoutube: false };
+  const socialDefaults = { facebookUrl: null, instagramUrl: null, websiteUrl: null, youtubeUrl: null, profileVisibility: "everyone" };
   const rsvps = [
     { showName: true, role: "Base", userName: "Alice", userId: "u1", isTeaching: false, ...socialDefaults },
     { showName: false, role: "Flyer", userName: "Bob", userId: "u2", isTeaching: false, ...socialDefaults },
@@ -44,8 +44,12 @@ describe("visibleAttendees", () => {
     { showName: false, role: "Hybrid", userName: "Dan", userId: "u4", isTeaching: false, ...socialDefaults },
   ];
 
+  // For tests with "everyone" visibility, all user IDs are in the canViewSet
+  const allCanView = new Set(["u1", "u2", "u3", "u4"]);
+  const emptyCanView = new Set<string>();
+
   it("only returns attendees with showName=true for regular users", () => {
-    const result = visibleAttendees(rsvps, "u1", false);
+    const result = visibleAttendees(rsvps, "u1", false, allCanView);
     expect(result).toEqual([
       { userId: "u1", name: "Alice", role: "Base", hidden: false, isTeaching: false, socialLinks: {} },
       { userId: "u3", name: "Carol", role: "Hybrid", hidden: false, isTeaching: false, socialLinks: {} },
@@ -53,7 +57,7 @@ describe("visibleAttendees", () => {
   });
 
   it("never includes other users with showName=false for regular users", () => {
-    const result = visibleAttendees(rsvps, "u1", false);
+    const result = visibleAttendees(rsvps, "u1", false, allCanView);
     const names = result.map((a) => a.name);
     expect(names).not.toContain("Bob");
     expect(names).not.toContain("Dan");
@@ -61,7 +65,7 @@ describe("visibleAttendees", () => {
 
   it("includes the viewer's own entry with hidden=true when showName=false", () => {
     // Bob (u2) has showName=false, viewing as Bob
-    const result = visibleAttendees(rsvps, "u2", false);
+    const result = visibleAttendees(rsvps, "u2", false, allCanView);
     const bob = result.find((a) => a.name === "Bob");
     expect(bob).toEqual({ userId: "u2", name: "Bob", role: "Flyer", hidden: true, isTeaching: false, socialLinks: {} });
     // Alice and Carol still visible
@@ -69,12 +73,12 @@ describe("visibleAttendees", () => {
   });
 
   it("admin sees ALL attendees", () => {
-    const result = visibleAttendees(rsvps, "u4", true);
+    const result = visibleAttendees(rsvps, "u4", true, allCanView);
     expect(result).toHaveLength(4);
   });
 
   it("admin sees hidden=true for showName=false attendees", () => {
-    const result = visibleAttendees(rsvps, "u4", true);
+    const result = visibleAttendees(rsvps, "u4", true, allCanView);
     const bob = result.find((a) => a.name === "Bob");
     expect(bob).toEqual({ userId: "u2", name: "Bob", role: "Flyer", hidden: true, isTeaching: false, socialLinks: {} });
     const alice = result.find((a) => a.name === "Alice");
@@ -87,7 +91,7 @@ describe("visibleAttendees", () => {
       { showName: false, role: "Flyer", userName: "Bob", userId: "u2", isTeaching: false, ...socialDefaults },
     ];
     // Viewer is u3 who is not in the list
-    expect(visibleAttendees(allHidden, "u3", false)).toEqual([]);
+    expect(visibleAttendees(allHidden, "u3", false, allCanView)).toEqual([]);
   });
 
   it("returns all when everyone opted in", () => {
@@ -95,7 +99,7 @@ describe("visibleAttendees", () => {
       { showName: true, role: "Base", userName: "Alice", userId: "u1", isTeaching: false, ...socialDefaults },
       { showName: true, role: "Flyer", userName: "Bob", userId: "u2", isTeaching: false, ...socialDefaults },
     ];
-    const result = visibleAttendees(allVisible, "u1", false);
+    const result = visibleAttendees(allVisible, "u1", false, allCanView);
     expect(result).toHaveLength(2);
     expect(result.every((a) => !a.hidden)).toBe(true);
   });
@@ -105,20 +109,29 @@ describe("visibleAttendees", () => {
       { showName: true, role: "Base", userName: "Alice", userId: "u1", isTeaching: true, ...socialDefaults },
       { showName: true, role: "Flyer", userName: "Bob", userId: "u2", isTeaching: false, ...socialDefaults },
     ];
-    const result = visibleAttendees(teachingRsvps, "u1", false);
+    const result = visibleAttendees(teachingRsvps, "u1", false, allCanView);
     const alice = result.find((a) => a.name === "Alice");
     expect(alice).toEqual({ userId: "u1", name: "Alice", role: "Base", hidden: false, isTeaching: true, socialLinks: {} });
     const bob = result.find((a) => a.name === "Bob");
     expect(bob).toEqual({ userId: "u2", name: "Bob", role: "Flyer", hidden: false, isTeaching: false, socialLinks: {} });
   });
 
-  it("includes visible social links in output", () => {
+  it("includes visible social links when user is in canViewSet", () => {
     const socialRsvps = [
-      { showName: true, role: "Base", userName: "Alice", userId: "u1", isTeaching: false, facebookUrl: "https://facebook.com/alice", instagramUrl: "https://instagram.com/alice", websiteUrl: null, youtubeUrl: null, showFacebook: true, showInstagram: true, showWebsite: false, showYoutube: false },
-      { showName: true, role: "Flyer", userName: "Bob", userId: "u2", isTeaching: false, facebookUrl: "https://facebook.com/bob", instagramUrl: null, websiteUrl: null, youtubeUrl: null, showFacebook: false, showInstagram: false, showWebsite: false, showYoutube: false },
+      { showName: true, role: "Base", userName: "Alice", userId: "u1", isTeaching: false, facebookUrl: "https://facebook.com/alice", instagramUrl: "https://instagram.com/alice", websiteUrl: null, youtubeUrl: null, profileVisibility: "everyone" },
+      { showName: true, role: "Flyer", userName: "Bob", userId: "u2", isTeaching: false, facebookUrl: "https://facebook.com/bob", instagramUrl: null, websiteUrl: null, youtubeUrl: null, profileVisibility: "everyone" },
     ];
-    const result = visibleAttendees(socialRsvps, "u1", false);
+    const canView = new Set(["u1", "u2"]);
+    const result = visibleAttendees(socialRsvps, "u1", false, canView);
     expect(result[0].socialLinks).toEqual({ facebook: "https://facebook.com/alice", instagram: "https://instagram.com/alice" });
-    expect(result[1].socialLinks).toEqual({});
+    expect(result[1].socialLinks).toEqual({ facebook: "https://facebook.com/bob" });
+  });
+
+  it("hides social links when user is NOT in canViewSet", () => {
+    const socialRsvps = [
+      { showName: true, role: "Base", userName: "Alice", userId: "u1", isTeaching: false, facebookUrl: "https://facebook.com/alice", instagramUrl: "https://instagram.com/alice", websiteUrl: null, youtubeUrl: null, profileVisibility: "friends" },
+    ];
+    const result = visibleAttendees(socialRsvps, "u2", false, emptyCanView);
+    expect(result[0].socialLinks).toEqual({});
   });
 });

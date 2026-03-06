@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
-import { toggleInterest, getEventById } from "@/services/events";
+import { toggleInterest, getEventById, getUserRsvpMap } from "@/services/events";
 import { validateInterestInput } from "@/services/validation";
 
 export async function POST(request: NextRequest) {
@@ -28,6 +28,15 @@ export async function POST(request: NextRequest) {
   const event = await getEventById(db, eventId);
   if (!event) {
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
+  }
+
+  // Prevent toggling interest when user already has an RSVP
+  const rsvpMap = await getUserRsvpMap(db, user.id);
+  if (rsvpMap[eventId]) {
+    return NextResponse.json(
+      { error: "You are already going to this event. Cancel your RSVP first to mark as interested." },
+      { status: 409 }
+    );
   }
 
   const { interested } = await toggleInterest(db, user.id, eventId);

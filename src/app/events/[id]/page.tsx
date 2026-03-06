@@ -235,14 +235,23 @@ export default async function EventDetailPage({
 
         {/* RSVP / Booking section */}
         <section className="mt-6 rounded-lg border border-gray-200 bg-white p-5">
-          {/* Interest button — shown to all logged-in users */}
+          {/* Interest / Going status — shown to all logged-in users */}
           {user && (
             <div className="mb-4">
-              <InterestButton
-                eventId={event.id}
-                isInterested={event.isInterested}
-                interestedCount={event.interestedCount}
-              />
+              {event.currentUserRsvp ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-green-300 bg-green-50 px-4 py-2 text-sm font-medium text-green-700">
+                  Going
+                  {event.interestedCount > 0 && (
+                    <span className="text-xs text-gray-500">({event.interestedCount} interested)</span>
+                  )}
+                </span>
+              ) : (
+                <InterestButton
+                  eventId={event.id}
+                  isInterested={event.isInterested}
+                  interestedCount={event.interestedCount}
+                />
+              )}
             </div>
           )}
 
@@ -261,14 +270,20 @@ export default async function EventDetailPage({
                   )}
                 </p>
               )}
-              <a
-                href={event.externalUrl!}
-                target="_blank"
-                rel="noreferrer"
-                className="block w-full rounded-lg bg-indigo-600 px-4 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-indigo-700"
-              >
-                Book externally &rarr;
-              </a>
+              {event.externalUrl ? (
+                <a
+                  href={event.externalUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block w-full rounded-lg bg-indigo-600 px-4 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-indigo-700"
+                >
+                  Book externally &rarr;
+                </a>
+              ) : (
+                <p className="block w-full rounded-lg bg-gray-200 px-4 py-3 text-center text-sm font-semibold text-gray-500">
+                  No booking link available
+                </p>
+              )}
               <p className="text-xs text-gray-500">
                 Booking is handled by the event organiser. You can mark yourself as &quot;going&quot; below to let others know you plan to attend.
               </p>

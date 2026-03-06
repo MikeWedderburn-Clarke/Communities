@@ -26,10 +26,7 @@ export async function createTestDb(): Promise<Db> {
       instagram_url TEXT,
       website_url TEXT,
       youtube_url TEXT,
-      show_facebook BOOLEAN NOT NULL DEFAULT false,
-      show_instagram BOOLEAN NOT NULL DEFAULT false,
-      show_website BOOLEAN NOT NULL DEFAULT false,
-      show_youtube BOOLEAN NOT NULL DEFAULT false,
+      profile_visibility TEXT NOT NULL DEFAULT 'everyone',
       home_city TEXT,
       use_current_location BOOLEAN NOT NULL DEFAULT false,
       last_login TEXT,
@@ -150,6 +147,15 @@ export async function createTestDb(): Promise<Db> {
       created_at TEXT NOT NULL
     );
     CREATE UNIQUE INDEX event_interests_event_user_unique ON event_interests(event_id, user_id);
+    CREATE TABLE user_relationships (
+      id TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      target_user_id TEXT NOT NULL REFERENCES users(id),
+      type TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX user_relationships_user_target_unique ON user_relationships(user_id, target_user_id);
+    CREATE INDEX user_relationships_target_idx ON user_relationships(target_user_id);
     CREATE TABLE scraper_runs (
       id TEXT PRIMARY KEY NOT NULL,
       source_id TEXT NOT NULL,
@@ -173,6 +179,7 @@ export async function createTestDb(): Promise<Db> {
  */
 export async function resetDb(db: Db): Promise<void> {
   await db.delete(schema.scraperRuns);
+  await db.delete(schema.userRelationships);
   await db.delete(schema.teacherSplits);
   await db.delete(schema.bookings);
   await db.delete(schema.ticketTypeEvents);

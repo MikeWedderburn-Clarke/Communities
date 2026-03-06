@@ -19,6 +19,12 @@ export type Currency = (typeof CURRENCIES)[number];
 export const EVENT_CATEGORIES = ["festival", "workshop", "class", "jam"] as const;
 export type EventCategory = (typeof EVENT_CATEGORIES)[number];
 
+export const RELATIONSHIP_TYPES = ["following", "friend"] as const;
+export type RelationshipType = (typeof RELATIONSHIP_TYPES)[number];
+
+export const PROFILE_VISIBILITY_TIERS = ["everyone", "followers", "friends"] as const;
+export type ProfileVisibility = (typeof PROFILE_VISIBILITY_TIERS)[number];
+
 export interface RecurrenceRule {
   frequency: RecurrenceFrequency;
   /** ISO-8601 date inclusive; null means no end date */
@@ -153,10 +159,7 @@ export interface UserProfile {
   instagramUrl: string | null;
   websiteUrl: string | null;
   youtubeUrl: string | null;
-  showFacebook: boolean;
-  showInstagram: boolean;
-  showWebsite: boolean;
-  showYoutube: boolean;
+  profileVisibility: ProfileVisibility;
   homeCity: string | null;
   useCurrentLocation: boolean;
   lastLogin: string | null;
@@ -170,6 +173,8 @@ export interface PublicProfile {
   instagramUrl: string | null;
   websiteUrl: string | null;
   youtubeUrl: string | null;
+  /** The viewer's current relationship to this user, or null */
+  viewerRelationship: RelationshipType | null;
 }
 
 /** Pending teacher request for admin review. */

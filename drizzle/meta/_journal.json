@@ -43,6 +43,13 @@
       "when": 1772798400000,
       "tag": "0005_add_fk_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1772884800000,
+      "tag": "0006_user_relationships",
+      "breakpoints": true
     }
   ]
 }

@@ -2,11 +2,23 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ROLES, type Role, type UserProfile } from "@/types";
+import { ROLES, PROFILE_VISIBILITY_TIERS, type Role, type UserProfile, type ProfileVisibility } from "@/types";
 
 interface Props {
   profile: UserProfile;
 }
+
+const VISIBILITY_LABELS: Record<ProfileVisibility, string> = {
+  everyone: "Everyone",
+  followers: "Followers",
+  friends: "Friends",
+};
+
+const VISIBILITY_DESCRIPTIONS: Record<ProfileVisibility, string> = {
+  everyone: "All registered users can see your social links",
+  followers: "Only people who follow you can see your social links",
+  friends: "Only people you mark as friends can see your social links",
+};
 
 export function ProfileForm({ profile }: Props) {
   const router = useRouter();
@@ -20,10 +32,9 @@ export function ProfileForm({ profile }: Props) {
   const [instagramUrl, setInstagramUrl] = useState(profile.instagramUrl ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(profile.websiteUrl ?? "");
   const [youtubeUrl, setYoutubeUrl] = useState(profile.youtubeUrl ?? "");
-  const [showFacebook, setShowFacebook] = useState(profile.showFacebook);
-  const [showInstagram, setShowInstagram] = useState(profile.showInstagram);
-  const [showWebsite, setShowWebsite] = useState(profile.showWebsite);
-  const [showYoutube, setShowYoutube] = useState(profile.showYoutube);
+  const [profileVisibility, setProfileVisibility] = useState<ProfileVisibility>(
+    profile.profileVisibility ?? "everyone",
+  );
 
   // Home city
   const [homeCity, setHomeCity] = useState(profile.homeCity ?? "");
@@ -103,10 +114,7 @@ export function ProfileForm({ profile }: Props) {
           instagramUrl: instagramUrl || null,
           websiteUrl: websiteUrl || null,
           youtubeUrl: youtubeUrl || null,
-          showFacebook,
-          showInstagram,
-          showWebsite,
-          showYoutube,
+          profileVisibility,
           homeCity: homeCity || null,
           useCurrentLocation,
         }),
@@ -292,42 +300,50 @@ export function ProfileForm({ profile }: Props) {
         </h2>
 
         <div className="mt-4 space-y-4">
-          <SocialLinkRow
-            label="Facebook"
-            placeholder="https://facebook.com/yourprofile"
-            url={facebookUrl}
-            onUrlChange={setFacebookUrl}
-            visible={showFacebook}
-            onVisibleChange={setShowFacebook}
-          />
-          <SocialLinkRow
-            label="Instagram"
-            placeholder="https://instagram.com/yourhandle"
-            url={instagramUrl}
-            onUrlChange={setInstagramUrl}
-            visible={showInstagram}
-            onVisibleChange={setShowInstagram}
-          />
-          <SocialLinkRow
-            label="Website"
-            placeholder="https://yourwebsite.com"
-            url={websiteUrl}
-            onUrlChange={setWebsiteUrl}
-            visible={showWebsite}
-            onVisibleChange={setShowWebsite}
-          />
-          <SocialLinkRow
-            label="YouTube"
-            placeholder="https://youtube.com/@yourchannel"
-            url={youtubeUrl}
-            onUrlChange={setYoutubeUrl}
-            visible={showYoutube}
-            onVisibleChange={setShowYoutube}
-          />
+          <SocialLinkRow label="Facebook" placeholder="https://facebook.com/yourprofile" url={facebookUrl} onUrlChange={setFacebookUrl} />
+          <SocialLinkRow label="Instagram" placeholder="https://instagram.com/yourhandle" url={instagramUrl} onUrlChange={setInstagramUrl} />
+          <SocialLinkRow label="Website" placeholder="https://yourwebsite.com" url={websiteUrl} onUrlChange={setWebsiteUrl} />
+          <SocialLinkRow label="YouTube" placeholder="https://youtube.com/@yourchannel" url={youtubeUrl} onUrlChange={setYoutubeUrl} />
         </div>
       </section>
 
-      {/* Section 4: Teacher Status */}
+      {/* Section 4: Profile Visibility */}
+      <section className="rounded-lg border border-gray-200 bg-white p-5">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+          Profile Visibility
+        </h2>
+        <p className="mt-1 text-sm text-gray-500">
+          Control who can see your social links on your profile and in event attendance lists.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {PROFILE_VISIBILITY_TIERS.map((tier) => (
+            <label
+              key={tier}
+              className={`cursor-pointer rounded-full border px-3 py-1 text-sm capitalize transition ${
+                profileVisibility === tier
+                  ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                  : "border-gray-200 hover:border-gray-300"
+              }`}
+              title={VISIBILITY_DESCRIPTIONS[tier]}
+            >
+              <input
+                type="radio"
+                name="profileVisibility"
+                value={tier}
+                checked={profileVisibility === tier}
+                onChange={() => setProfileVisibility(tier)}
+                className="sr-only"
+              />
+              {VISIBILITY_LABELS[tier]}
+            </label>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-gray-400">
+          {VISIBILITY_DESCRIPTIONS[profileVisibility]}
+        </p>
+      </section>
+
+      {/* Section 5: Teacher Status */}
       <section className="rounded-lg border border-gray-200 bg-white p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
           Teacher Status
@@ -385,39 +401,24 @@ function SocialLinkRow({
   placeholder,
   url,
   onUrlChange,
-  visible,
-  onVisibleChange,
 }: {
   label: string;
   placeholder: string;
   url: string;
   onUrlChange: (v: string) => void;
-  visible: boolean;
-  onVisibleChange: (v: boolean) => void;
 }) {
   return (
     <div className="space-y-1">
       <label className="block text-sm font-medium text-gray-700">
         {label}
       </label>
-      <div className="flex items-center gap-3">
-        <input
-          type="url"
-          placeholder={placeholder}
-          value={url}
-          onChange={(e) => onUrlChange(e.target.value)}
-          className="flex-1 rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-        />
-        <label className="flex items-center gap-1.5 text-sm text-gray-600 whitespace-nowrap">
-          <input
-            type="checkbox"
-            checked={visible}
-            onChange={(e) => onVisibleChange(e.target.checked)}
-            className="rounded border-gray-300"
-          />
-          Visible to others
-        </label>
-      </div>
+      <input
+        type="url"
+        placeholder={placeholder}
+        value={url}
+        onChange={(e) => onUrlChange(e.target.value)}
+        className="w-full rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+      />
     </div>
   );
 }

@@ -20,10 +20,9 @@ export const users = pgTable("users", {
   instagramUrl: text("instagram_url"),
   websiteUrl: text("website_url"),
   youtubeUrl: text("youtube_url"),
-  showFacebook: boolean("show_facebook").notNull().default(false),
-  showInstagram: boolean("show_instagram").notNull().default(false),
-  showWebsite: boolean("show_website").notNull().default(false),
-  showYoutube: boolean("show_youtube").notNull().default(false),
+  // Profile visibility: who can see social links
+  profileVisibility: text("profile_visibility").notNull().default("everyone"),
+  // "everyone" | "followers" | "friends"
   // Home city
   homeCity: text("home_city"),
   useCurrentLocation: boolean("use_current_location").notNull().default(false),
@@ -245,4 +244,23 @@ export const eventInterests = pgTable("event_interests", {
 }, (table) => ([
   uniqueIndex("event_interests_event_user_unique").on(table.eventId, table.userId),
   index("event_interests_user_id_idx").on(table.userId),
+]));
+
+// ── User Relationships ──────────────────────────────────────────────
+// Directional relationship: userId sets their view of targetUserId.
+// type: "following" | "friend"
+
+export const userRelationships = pgTable("user_relationships", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id),
+  targetUserId: text("target_user_id")
+    .notNull()
+    .references(() => users.id),
+  type: text("type").notNull(), // "following" | "friend"
+  createdAt: text("created_at").notNull(),
+}, (table) => ([
+  uniqueIndex("user_relationships_user_target_unique").on(table.userId, table.targetUserId),
+  index("user_relationships_target_idx").on(table.targetUserId),
 ]));
