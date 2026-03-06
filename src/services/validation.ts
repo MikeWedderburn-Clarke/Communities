@@ -1,4 +1,4 @@
-import { ROLES, RECURRENCE_FREQUENCIES, SKILL_LEVELS, BOOKING_PAYMENT_STATUSES, EVENT_GROUP_TYPES, type Role, type SkillLevel, type CreateEventInput, type CreateLocationInput, type RecurrenceRule, type CreateEventGroupInput, type CreateTicketTypeInput, type CreateBookingInput, type SetTeacherSplitInput, type UpdateBookingStatusInput, type BookingPaymentStatus, type EventGroupType } from "@/types";
+import { ROLES, RECURRENCE_FREQUENCIES, SKILL_LEVELS, BOOKING_PAYMENT_STATUSES, EVENT_GROUP_TYPES, EVENT_CATEGORIES, type Role, type SkillLevel, type EventCategory, type CreateEventInput, type CreateLocationInput, type RecurrenceRule, type CreateEventGroupInput, type CreateTicketTypeInput, type CreateBookingInput, type SetTeacherSplitInput, type UpdateBookingStatusInput, type BookingPaymentStatus, type EventGroupType } from "@/types";
 
 export interface ValidationError {
   field: string;
@@ -217,6 +217,69 @@ export function validateEventInput(body: unknown): {
     }
   }
 
+  // eventCategory — optional, defaults to "class"
+  let eventCategory: EventCategory = "class";
+  if (obj.eventCategory !== undefined && obj.eventCategory !== null) {
+    if (!(EVENT_CATEGORIES as readonly string[]).includes(obj.eventCategory as string)) {
+      errors.push({ field: "eventCategory", message: `eventCategory must be one of: ${EVENT_CATEGORIES.join(", ")}` });
+    } else {
+      eventCategory = obj.eventCategory as EventCategory;
+    }
+  }
+
+  // isExternal — optional boolean, defaults to false
+  let isExternal = false;
+  if (obj.isExternal !== undefined && obj.isExternal !== null) {
+    if (typeof obj.isExternal !== "boolean") {
+      errors.push({ field: "isExternal", message: "isExternal must be a boolean" });
+    } else {
+      isExternal = obj.isExternal;
+    }
+  }
+
+  // externalUrl — required when isExternal is true, must be a valid URL
+  let externalUrl: string | null = null;
+  if (obj.externalUrl !== undefined && obj.externalUrl !== null && obj.externalUrl !== "") {
+    if (typeof obj.externalUrl !== "string") {
+      errors.push({ field: "externalUrl", message: "externalUrl must be a string" });
+    } else {
+      const trimmed = obj.externalUrl.trim();
+      if (trimmed.length > 2000) {
+        errors.push({ field: "externalUrl", message: "externalUrl must be 2000 characters or less" });
+      } else {
+        try {
+          new URL(trimmed);
+          externalUrl = trimmed;
+        } catch {
+          errors.push({ field: "externalUrl", message: "externalUrl must be a valid URL" });
+        }
+      }
+    }
+  }
+  if (isExternal && !externalUrl) {
+    errors.push({ field: "externalUrl", message: "externalUrl is required for external events" });
+  }
+
+  // posterUrl — optional valid URL
+  let posterUrl: string | null = null;
+  if (obj.posterUrl !== undefined && obj.posterUrl !== null && obj.posterUrl !== "") {
+    if (typeof obj.posterUrl !== "string") {
+      errors.push({ field: "posterUrl", message: "posterUrl must be a string" });
+    } else {
+      const trimmed = obj.posterUrl.trim();
+      if (trimmed.length > 2000) {
+        errors.push({ field: "posterUrl", message: "posterUrl must be 2000 characters or less" });
+      } else {
+        try {
+          new URL(trimmed);
+          posterUrl = trimmed;
+        } catch {
+          errors.push({ field: "posterUrl", message: "posterUrl must be a valid URL" });
+        }
+      }
+    }
+  }
+
   if (errors.length > 0) {
     return { valid: false, errors };
   }
@@ -236,6 +299,10 @@ export function validateEventInput(body: unknown): {
       costCurrency,
       concessionAmount,
       maxAttendees,
+      eventCategory,
+      isExternal,
+      externalUrl,
+      posterUrl,
     },
   };
 }
@@ -588,5 +655,36 @@ export function validateSetTeacherSplitInput(body: unknown): {
       fixedAmount: obj.fixedAmount as number,
       currency: (obj.currency as string).trim().toUpperCase(),
     },
+  };
+}
+
+// ── Interest Validators ──────────────────────────────────────────────
+
+export function validateInterestInput(body: unknown): {
+  valid: true;
+  data: { eventId: string };
+} | {
+  valid: false;
+  errors: ValidationError[];
+} {
+  const errors: ValidationError[] = [];
+
+  if (typeof body !== "object" || body === null) {
+    return { valid: false, errors: [{ field: "body", message: "Request body must be a JSON object" }] };
+  }
+
+  const obj = body as Record<string, unknown>;
+
+  if (typeof obj.eventId !== "string" || obj.eventId.trim() === "") {
+    errors.push({ field: "eventId", message: "eventId is required and must be a non-empty string" });
+  }
+
+  if (errors.length > 0) {
+    return { valid: false, errors };
+  }
+
+  return {
+    valid: true,
+    data: { eventId: (obj.eventId as string).trim() },
   };
 }

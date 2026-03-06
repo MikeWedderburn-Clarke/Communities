@@ -38,6 +38,9 @@ Web app first for iteration; keep architecture open so iOS/Android clients can b
 - Ticket Types: per-group ticket definitions with cost, capacity, and concession pricing; independent capacity pools per ticket type
 - Bookings: ticket purchase with payment status tracking (pending / paid / concession_paid / comp / refunded)
 - Teacher Revenue Splits: fixed amount per teacher per ticket type; admin teacher earnings report at `/admin/groups/[id]/teacher-report`
+- Event Categories: every event has a category (festival / workshop / class / jam); category badge on cards + detail; category filter pills on events list
+- Internal/External Events: internal events use in-app RSVP/ticketing; external events show details + poster image + "Book externally" link while still supporting in-app "going" RSVP tracking; type filter (Internal / External) on events list
+- Interested Feature: users can mark events as "interested" (watchlist); toggle via `InterestButton` component; interested count shown on cards + detail; "Interested" filter pill on events list; backed by `event_interests` table + `POST /api/interest` toggle endpoint
 
 ## Not yet built
 - **Payment processing** — cost/concession fields are stored and displayed, but no payment gateway (Stripe etc.) is integrated; the cost fields are a data foundation for a future payments feature.

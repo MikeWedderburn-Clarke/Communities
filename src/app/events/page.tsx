@@ -1,8 +1,9 @@
 import { Suspense } from "react";
 import { EventsContent } from "./events-content";
-import { getAllEvents, getUserRsvpMap } from "@/services/events";
+import { getAllEvents, getUserRsvpMap, getUserInterestSet, getInterestCounts } from "@/services/events";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
+import type { Role } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +15,18 @@ export default async function EventsPage({ searchParams }: Props) {
   const { city } = await searchParams;
   const user = await getCurrentUser();
   const rawEvents = await getAllEvents(db);
-  const rsvpMap = user ? await getUserRsvpMap(db, user.id) : {};
-  const events = rawEvents.map((e) => ({ ...e, userRsvp: rsvpMap[e.id] ?? null }));
+  const eventIds = rawEvents.map((e) => e.id);
+  const [rsvpMap, interestSet, interestCounts] = await Promise.all([
+    user ? getUserRsvpMap(db, user.id) : ({} as Record<string, { role: Role; paymentStatus: string | null }>),
+    user ? getUserInterestSet(db, user.id) : new Set<string>(),
+    getInterestCounts(db, eventIds),
+  ]);
+  const events = rawEvents.map((e) => ({
+    ...e,
+    userRsvp: rsvpMap[e.id] ?? null,
+    interestedCount: interestCounts[e.id] ?? 0,
+    isInterested: interestSet.has(e.id),
+  }));
 
   const homeCity = city ?? user?.homeCity ?? null;
   const lastLogin = user?.freshSince ?? null;

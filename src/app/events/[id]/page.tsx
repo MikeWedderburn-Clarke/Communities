@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { RoleBadges } from "@/components/role-badges";
 import { SocialIcons } from "@/components/social-icons";
-import { getEventDetail } from "@/services/events";
+import { getEventDetail, getEventInterestInfo } from "@/services/events";
 import { getEventGroupForEvent } from "@/services/event-groups";
 import { getTicketTypesForEvent } from "@/services/ticket-types";
 import { getUserBookingForEvent } from "@/services/bookings";
@@ -12,6 +12,7 @@ import { formatRecurrenceSummary } from "@/lib/recurrence";
 import { formatCost } from "@/lib/format-cost";
 import { db } from "@/db";
 import { RsvpForm } from "./rsvp-form";
+import { InterestButton } from "./interest-button";
 import { TicketSelector } from "@/components/ticket-selector";
 import Link from "next/link";
 
@@ -31,11 +32,15 @@ export default async function EventDetailPage({
 
   if (!event) notFound();
 
-  // Fetch group membership and ticket types in parallel
-  const [group, ticketTypes] = await Promise.all([
+  // Fetch group membership, ticket types, and interest info in parallel
+  const [group, ticketTypes, interestInfo] = await Promise.all([
     getEventGroupForEvent(db, id, user?.isAdmin ?? false),
     getTicketTypesForEvent(db, id),
+    getEventInterestInfo(db, id, user?.id ?? null),
   ]);
+
+  event.interestedCount = interestInfo.interestedCount;
+  event.isInterested = interestInfo.isInterested;
 
   // Fetch user's active booking for this event (if any)
   const userBooking = user && ticketTypes.length > 0
@@ -89,8 +94,28 @@ export default async function EventDetailPage({
         </div>
       )}
 
+        {/* Poster image */}
+        {event.posterUrl && (
+          <div className="mt-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={event.posterUrl}
+              alt={`${event.title} poster`}
+              className="w-full rounded-lg object-cover max-h-96"
+            />
+          </div>
+        )}
+
         <h1 className="mt-4 text-3xl font-bold">{event.title}</h1>
         <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
+          <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold capitalize text-gray-700">
+            {event.eventCategory}
+          </span>
+          {event.isExternal && (
+            <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+              External event
+            </span>
+          )}
           {freshSinceLogin && (
             <span className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-700">
               New since your last login
@@ -207,7 +232,71 @@ export default async function EventDetailPage({
 
         {/* RSVP / Booking section */}
         <section className="mt-6 rounded-lg border border-gray-200 bg-white p-5">
-          {hasTicketTypes ? (
+          {/* Interest button — shown to all logged-in users */}
+          {user && (
+            <div className="mb-4">
+              <InterestButton
+                eventId={event.id}
+                isInterested={event.isInterested}
+                interestedCount={event.interestedCount}
+              />
+            </div>
+          )}
+
+          {event.isExternal ? (
+            /* External event — show booking link + optional RSVP "going" form */
+            <div className="space-y-4">
+              {/* Cost — always visible for external events too */}
+              {event.costAmount !== null && (
+                <p className="text-sm font-medium text-gray-700">
+                  Cost:{" "}
+                  <span className="text-gray-900">{formatCost(event.costAmount, event.costCurrency)}</span>
+                  {event.concessionAmount !== null && (
+                    <span className="ml-2 text-gray-500">
+                      ({formatCost(event.concessionAmount, event.costCurrency)} concession)
+                    </span>
+                  )}
+                </p>
+              )}
+              <a
+                href={event.externalUrl!}
+                target="_blank"
+                rel="noreferrer"
+                className="block w-full rounded-lg bg-indigo-600 px-4 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-indigo-700"
+              >
+                Book externally &rarr;
+              </a>
+              <p className="text-xs text-gray-500">
+                Booking is handled by the event organiser. You can mark yourself as &quot;going&quot; below to let others know you plan to attend.
+              </p>
+              {user ? (
+                <>
+                  <h2 className="font-semibold">
+                    {event.currentUserRsvp ? "Update your attendance" : "Mark as going"}
+                  </h2>
+                  <RsvpForm
+                    eventId={event.id}
+                    occurrenceDate={occurrenceDate}
+                    currentRsvp={event.currentUserRsvp}
+                    isTeacherApproved={user?.isTeacherApproved ?? false}
+                    defaultRole={user?.defaultRole ?? null}
+                    defaultShowName={user?.defaultShowName ?? null}
+                    prerequisites={event.prerequisites}
+                    costAmount={null}
+                    costCurrency={null}
+                    concessionAmount={null}
+                  />
+                </>
+              ) : (
+                <p className="text-sm text-gray-500">
+                  <Link href={`/login?redirect=/events/${event.id}`} className="text-indigo-600 hover:underline">
+                    Log in
+                  </Link>{" "}
+                  to mark yourself as going.
+                </p>
+              )}
+            </div>
+          ) : hasTicketTypes ? (
             /* Ticket-based booking flow */
             user ? (
               <TicketSelector

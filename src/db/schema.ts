@@ -66,6 +66,10 @@ export const events = pgTable("events", {
   costCurrency: text("cost_currency"),
   concessionAmount: doublePrecision("concession_amount"),
   maxAttendees: integer("max_attendees"), // nullable; null = no limit
+  eventCategory: text("event_category").notNull().default("class"), // "festival" | "workshop" | "class" | "jam"
+  isExternal: boolean("is_external").notNull().default(false),
+  externalUrl: text("external_url"),     // nullable; URL for external booking
+  posterUrl: text("poster_url"),         // nullable; image URL for poster
 }, (table) => ([
   // Composite index covering the WHERE status='approved' + ORDER BY date_time
   // used by getAllEvents / getUpcomingEvents on every page load.
@@ -206,4 +210,20 @@ export const teacherSplits = pgTable("teacher_splits", {
   updatedAt: text("updated_at").notNull(),
 }, (t) => ([
   uniqueIndex("ts_ticket_teacher_unique").on(t.ticketTypeId, t.teacherUserId),
+]));
+
+// ── Event Interests ─────────────────────────────────────────────────
+// Lightweight "interested" / watchlist signal. Separate from RSVPs so
+// the RSVP system (with roles, occurrence dates, etc.) stays unchanged.
+
+export const eventInterests = pgTable("event_interests", {
+  eventId: text("event_id")
+    .notNull()
+    .references(() => events.id),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id),
+  createdAt: text("created_at").notNull(),
+}, (table) => ([
+  uniqueIndex("event_interests_event_user_unique").on(table.eventId, table.userId),
 ]));

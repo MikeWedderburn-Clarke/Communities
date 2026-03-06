@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 ---
 
+## 2026-03-06
+
+- Internal/external events: `is_external`, `external_url`, and `poster_url` columns added to events; external events show a prominent "Book externally" link + poster image while still supporting in-app "going" RSVP tracking
+- Event categories: `event_category` column (festival / workshop / class / jam) added to all events; category badge shown on event cards and detail page; category filter pills on the events list
+- Interested feature: `event_interests` table; POST `/api/interest` toggle endpoint; `InterestButton` client component with optimistic UI; interested count shown on event cards and detail page; "Interested" filter pill on events list
+- Events list: new category filter (All / Festival / Workshop / Class / Jam) and type filter (All / Internal / External) pill rows
+- Event creation form: category picker, external event checkbox with required booking URL, optional poster image URL
+- 48 new tests: interest toggle/set/counts/info, external event creation/retrieval, validation for eventCategory/isExternal/externalUrl/posterUrl/validateInterestInput (251 total)
+
+---
+
 ## 2026-03-04
 
 - Calendar: year/month counts now show total occurrence count (not unique event count) and reflect the active status filter — `statusFilteredEvents` (status-filtered, not date-filtered) replaces raw `allEvents` as the counting basis; `yearCount` derived as sum of `monthCounts` avoiding a separate pass

@@ -16,6 +16,9 @@ export type SkillLevel = (typeof SKILL_LEVELS)[number];
 export const CURRENCIES = ["GBP", "USD", "EUR", "CAD", "AUD", "NZD", "CHF", "SEK", "NOK", "DKK"] as const;
 export type Currency = (typeof CURRENCIES)[number];
 
+export const EVENT_CATEGORIES = ["festival", "workshop", "class", "jam"] as const;
+export type EventCategory = (typeof EVENT_CATEGORIES)[number];
+
 export interface RecurrenceRule {
   frequency: RecurrenceFrequency;
   /** ISO-8601 date inclusive; null means no end date */
@@ -87,6 +90,13 @@ export interface EventSummary {
   groupName: string | null;
   /** True when ticket types exist for this event (ticket-booking flow instead of RSVP) */
   hasTicketTypes: boolean;
+  eventCategory: EventCategory;
+  isExternal: boolean;
+  externalUrl: string | null;
+  posterUrl: string | null;
+  interestedCount: number;
+  /** Whether the current logged-in user has marked this event as "interested" */
+  isInterested: boolean;
 }
 
 export interface EventDetail extends EventSummary {
@@ -323,6 +333,10 @@ export interface CreateEventInput {
   costCurrency: string | null;
   concessionAmount: number | null;
   maxAttendees: number | null;
+  eventCategory: EventCategory;
+  isExternal: boolean;
+  externalUrl: string | null;
+  posterUrl: string | null;
 }
 
 /** Pending event for admin review. */

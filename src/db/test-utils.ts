@@ -65,7 +65,11 @@ export async function createTestDb(): Promise<Db> {
       cost_amount DOUBLE PRECISION,
       cost_currency TEXT,
       concession_amount DOUBLE PRECISION,
-      max_attendees INTEGER
+      max_attendees INTEGER,
+      event_category TEXT NOT NULL DEFAULT 'class',
+      is_external BOOLEAN NOT NULL DEFAULT false,
+      external_url TEXT,
+      poster_url TEXT
     );
     CREATE TABLE rsvps (
       id SERIAL PRIMARY KEY,
@@ -140,6 +144,12 @@ export async function createTestDb(): Promise<Db> {
       updated_at TEXT NOT NULL
     );
     CREATE UNIQUE INDEX ts_ticket_teacher_unique ON teacher_splits(ticket_type_id, teacher_user_id);
+    CREATE TABLE event_interests (
+      event_id TEXT NOT NULL REFERENCES events(id),
+      user_id TEXT NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX event_interests_event_user_unique ON event_interests(event_id, user_id);
   `);
 
   // Attach the raw PGlite client so test afterAll hooks can call client.close().
@@ -161,6 +171,7 @@ export async function resetDb(db: Db): Promise<void> {
   await db.delete(schema.eventGroupMembers);
   await db.delete(schema.eventGroups);
   await db.delete(schema.rsvps);
+  await db.delete(schema.eventInterests);
   await db.delete(schema.events);
   await db.delete(schema.locations);
   await db.delete(schema.users);

@@ -385,6 +385,10 @@ describe("event creation and approval flow", () => {
     costCurrency: null,
     concessionAmount: null,
     maxAttendees: null,
+    eventCategory: "jam" as const,
+    isExternal: false,
+    externalUrl: null,
+    posterUrl: null,
   };
 
   it("admin-created events are auto-approved", async () => {

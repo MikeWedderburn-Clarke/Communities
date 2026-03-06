@@ -51,7 +51,17 @@ export function EventCard({ event, lastLogin, from = "list" }: Props) {
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h3 className="text-lg font-semibold text-gray-900">{event.title}</h3>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <h3 className="text-lg font-semibold text-gray-900">{event.title}</h3>
+              <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium capitalize text-gray-600">
+                {event.eventCategory}
+              </span>
+              {event.isExternal && (
+                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                  External
+                </span>
+              )}
+            </div>
             <p className="mt-1 text-sm text-gray-600">
               {event.isPast ? "Last:" : "Next:"} {formatDateTime(upcoming.dateTime)}
             </p>
@@ -67,6 +77,9 @@ export function EventCard({ event, lastLogin, from = "list" }: Props) {
               </span>
             )}
             <p className="text-sm font-medium text-indigo-600">{event.attendeeCount} going</p>
+            {event.interestedCount > 0 && (
+              <p className="text-xs text-pink-600">{event.interestedCount} interested</p>
+            )}
           </div>
         </div>
         <div className="mt-3">

@@ -22,6 +22,13 @@
       "when": 1772539647000,
       "tag": "0002_occurrence_rsvps",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1772625600000,
+      "tag": "0003_event_categories_interests",
+      "breakpoints": true
     }
   ]
 }

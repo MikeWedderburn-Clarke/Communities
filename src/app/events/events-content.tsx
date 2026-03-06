@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import type { EventSummary } from "@/types";
+import { EVENT_CATEGORIES, type EventSummary, type EventCategory } from "@/types";
 import { isEventNew, isEventUpdated, hasOccurrenceInRange, countOccurrencesInRange } from "@/lib/event-utils";
 import { toDateString } from "@/lib/date-utils";
 import { type DateRange } from "./event-calendar";
@@ -17,8 +17,10 @@ export type DrillState =
   | { level: "city"; country: string; city: string }
   | { level: "venue"; country: string; city: string; venue: string };
 
-type FilterKey = "all" | "new" | "updated" | "full" | "past" | "booked" | "toPay";
+type FilterKey = "all" | "new" | "updated" | "full" | "past" | "booked" | "toPay" | "interested";
 export type CountMode = "events" | "instances";
+type CategoryFilter = "all" | EventCategory;
+type TypeFilter = "all" | "internal" | "external";
 
 interface Props {
   events: EventSummary[];
@@ -73,8 +75,22 @@ export function EventsContent({ events, homeCity, lastLogin, userId }: Props) {
   // ── Status filter derived from URL ─────────────────────────────────────────
   const activeFilter: FilterKey | null = useMemo(() => {
     const f = searchParams.get("filter") as FilterKey | null;
-    const validKeys: FilterKey[] = ["all", "new", "updated", "full", "past", "booked", "toPay"];
+    const validKeys: FilterKey[] = ["all", "new", "updated", "full", "past", "booked", "toPay", "interested"];
     return f && validKeys.includes(f) ? f : null;
+  }, [searchParams]);
+
+  // ── Category filter derived from URL ────────────────────────────────────────
+  const categoryFilter: CategoryFilter = useMemo(() => {
+    const c = searchParams.get("category") as CategoryFilter | null;
+    if (c && (EVENT_CATEGORIES as readonly string[]).includes(c)) return c;
+    return "all";
+  }, [searchParams]);
+
+  // ── Type filter derived from URL ───────────────────────────────────────────
+  const typeFilter: TypeFilter = useMemo(() => {
+    const t = searchParams.get("type") as TypeFilter | null;
+    if (t === "internal" || t === "external") return t;
+    return "all";
   }, [searchParams]);
 
   // ── Count mode derived from URL ────────────────────────────────────────────
@@ -128,15 +144,27 @@ export function EventsContent({ events, homeCity, lastLogin, userId }: Props) {
     );
   }, [events, locationDrill]);
 
-  // ── Pre-status base: location+date-range filtered ─────────────────────────
+  // ── Category + type filter: applied after location ────────────────────────
+  const categoryTypeFiltered = useMemo(() => {
+    let result = locationFilteredEvents;
+    if (categoryFilter !== "all") {
+      result = result.filter((e) => e.eventCategory === categoryFilter);
+    }
+    if (typeFilter !== "all") {
+      result = result.filter((e) => typeFilter === "external" ? e.isExternal : !e.isExternal);
+    }
+    return result;
+  }, [locationFilteredEvents, categoryFilter, typeFilter]);
+
+  // ── Pre-status base: location+category+type+date-range filtered ──────────
   const preStatusBase = useMemo(() => {
-    if (!dateRange) return locationFilteredEvents;
-    return locationFilteredEvents.filter((e) => hasOccurrenceInRange(e, dateRange.start, dateRange.end));
-  }, [locationFilteredEvents, dateRange]);
+    if (!dateRange) return categoryTypeFiltered;
+    return categoryTypeFiltered.filter((e) => hasOccurrenceInRange(e, dateRange.start, dateRange.end));
+  }, [categoryTypeFiltered, dateRange]);
 
   // ── Filter counts — single pass ────────────────────────────────────────────
   const filterCounts = useMemo(() => {
-    const counts = { upcoming: 0, all: 0, new: 0, updated: 0, full: 0, past: 0, booked: 0, toPay: 0 };
+    const counts = { upcoming: 0, all: 0, new: 0, updated: 0, full: 0, past: 0, booked: 0, toPay: 0, interested: 0 };
     for (const e of preStatusBase) {
       const w = countMode === "instances" && dateRange
         ? countOccurrencesInRange(e, dateRange.start, dateRange.end)
@@ -153,6 +181,7 @@ export function EventsContent({ events, homeCity, lastLogin, userId }: Props) {
         if (e.userRsvp !== null && (e.costAmount ?? 0) > 0 && e.userRsvp.paymentStatus === null)
           counts.toPay += w;
       }
+      if (e.isInterested) counts.interested += w;
     }
     return counts;
   }, [preStatusBase, lastLogin, countMode, dateRange]);
@@ -160,43 +189,46 @@ export function EventsContent({ events, homeCity, lastLogin, userId }: Props) {
   // ── Filtered events ────────────────────────────────────────────────────────
   const filteredEvents = useMemo(() => {
     switch (activeFilter) {
-      case "all":     return preStatusBase;
-      case "new":     return preStatusBase.filter((e) => !e.isPast && isEventNew(e, lastLogin));
-      case "updated": return preStatusBase.filter((e) => !e.isPast && isEventUpdated(e, lastLogin));
-      case "full":    return preStatusBase.filter((e) => e.isFull);
-      case "past":    return preStatusBase.filter((e) => e.isPast);
-      case "booked":  return preStatusBase.filter((e) => !e.isPast && e.userRsvp !== null);
-      case "toPay":   return preStatusBase.filter((e) => !e.isPast && e.userRsvp !== null && (e.costAmount ?? 0) > 0 && e.userRsvp.paymentStatus === null);
-      default:        return preStatusBase.filter((e) => !e.isPast);
+      case "all":        return preStatusBase;
+      case "new":        return preStatusBase.filter((e) => !e.isPast && isEventNew(e, lastLogin));
+      case "updated":    return preStatusBase.filter((e) => !e.isPast && isEventUpdated(e, lastLogin));
+      case "full":       return preStatusBase.filter((e) => e.isFull);
+      case "past":       return preStatusBase.filter((e) => e.isPast);
+      case "booked":     return preStatusBase.filter((e) => !e.isPast && e.userRsvp !== null);
+      case "toPay":      return preStatusBase.filter((e) => !e.isPast && e.userRsvp !== null && (e.costAmount ?? 0) > 0 && e.userRsvp.paymentStatus === null);
+      case "interested": return preStatusBase.filter((e) => e.isInterested);
+      default:           return preStatusBase.filter((e) => !e.isPast);
     }
   }, [preStatusBase, activeFilter, lastLogin]);
 
   // Status-filtered but NOT date-filtered — used for calendar year/month counts
   // so the counts reflect the active status filter across all time periods.
-  // Also location-filtered to match the current drill state.
+  // Also location+category+type-filtered to match the current drill state.
   const statusFilteredEvents = useMemo(() => {
     switch (activeFilter) {
-      case "all":     return locationFilteredEvents;
-      case "new":     return locationFilteredEvents.filter((e) => !e.isPast && isEventNew(e, lastLogin));
-      case "updated": return locationFilteredEvents.filter((e) => !e.isPast && isEventUpdated(e, lastLogin));
-      case "full":    return locationFilteredEvents.filter((e) => e.isFull);
-      case "past":    return locationFilteredEvents.filter((e) => e.isPast);
-      case "booked":  return locationFilteredEvents.filter((e) => !e.isPast && e.userRsvp !== null);
-      case "toPay":   return locationFilteredEvents.filter((e) => !e.isPast && e.userRsvp !== null && (e.costAmount ?? 0) > 0 && e.userRsvp.paymentStatus === null);
-      default:        return locationFilteredEvents.filter((e) => !e.isPast);
+      case "all":        return categoryTypeFiltered;
+      case "new":        return categoryTypeFiltered.filter((e) => !e.isPast && isEventNew(e, lastLogin));
+      case "updated":    return categoryTypeFiltered.filter((e) => !e.isPast && isEventUpdated(e, lastLogin));
+      case "full":       return categoryTypeFiltered.filter((e) => e.isFull);
+      case "past":       return categoryTypeFiltered.filter((e) => e.isPast);
+      case "booked":     return categoryTypeFiltered.filter((e) => !e.isPast && e.userRsvp !== null);
+      case "toPay":      return categoryTypeFiltered.filter((e) => !e.isPast && e.userRsvp !== null && (e.costAmount ?? 0) > 0 && e.userRsvp.paymentStatus === null);
+      case "interested": return categoryTypeFiltered.filter((e) => e.isInterested);
+      default:           return categoryTypeFiltered.filter((e) => !e.isPast);
     }
-  }, [locationFilteredEvents, activeFilter, lastLogin]);
+  }, [categoryTypeFiltered, activeFilter, lastLogin]);
 
   type FilterDef = { key: FilterKey; label: string; selectedCls: string; loggedInOnly?: boolean };
 
   const filterDefs: FilterDef[] = [
-    { key: "all",     label: "Show all", selectedCls: "bg-gray-800 text-white border-gray-800" },
-    { key: "new",     label: "New",      selectedCls: "bg-blue-600 text-white border-blue-600" },
-    { key: "updated", label: "Updated",  selectedCls: "bg-teal-600 text-white border-teal-600" },
-    { key: "full",    label: "Full",     selectedCls: "bg-red-600 text-white border-red-600" },
-    { key: "past",    label: "Past",     selectedCls: "bg-orange-500 text-white border-orange-500" },
-    { key: "booked",  label: "Booked",   selectedCls: "bg-green-600 text-white border-green-600", loggedInOnly: true },
-    { key: "toPay",   label: "To Pay",   selectedCls: "bg-yellow-500 text-white border-yellow-500", loggedInOnly: true },
+    { key: "all",        label: "Show all", selectedCls: "bg-gray-800 text-white border-gray-800" },
+    { key: "new",        label: "New",      selectedCls: "bg-blue-600 text-white border-blue-600" },
+    { key: "updated",    label: "Updated",  selectedCls: "bg-teal-600 text-white border-teal-600" },
+    { key: "full",       label: "Full",     selectedCls: "bg-red-600 text-white border-red-600" },
+    { key: "past",       label: "Past",     selectedCls: "bg-orange-500 text-white border-orange-500" },
+    { key: "interested", label: "Interested", selectedCls: "bg-pink-600 text-white border-pink-600", loggedInOnly: true },
+    { key: "booked",     label: "Booked",   selectedCls: "bg-green-600 text-white border-green-600", loggedInOnly: true },
+    { key: "toPay",      label: "To Pay",   selectedCls: "bg-yellow-500 text-white border-yellow-500", loggedInOnly: true },
   ];
 
   const unselectedCls = "border border-gray-300 bg-white text-gray-600 hover:bg-gray-50";
@@ -276,6 +308,47 @@ export function EventsContent({ events, homeCity, lastLogin, userId }: Props) {
               </button>
             );
           })}
+      </div>
+
+      {/* Category filter pills */}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => updateParams({ category: null })}
+          className={`rounded-full border px-3 py-1 text-sm font-medium capitalize transition shadow-sm ${
+            categoryFilter === "all" ? "bg-indigo-600 text-white border-indigo-600 shadow-inner" : unselectedCls
+          }`}
+        >
+          All categories
+        </button>
+        {EVENT_CATEGORIES.map((cat) => (
+          <button
+            key={cat}
+            type="button"
+            onClick={() => updateParams({ category: categoryFilter === cat ? null : cat })}
+            className={`rounded-full border px-3 py-1 text-sm font-medium capitalize transition shadow-sm ${
+              categoryFilter === cat ? "bg-indigo-600 text-white border-indigo-600 shadow-inner" : unselectedCls
+            }`}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      {/* Type filter pills (internal / external) */}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {(["all", "internal", "external"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => updateParams({ type: t === "all" ? null : typeFilter === t ? null : t })}
+            className={`rounded-full border px-3 py-1 text-sm font-medium capitalize transition shadow-sm ${
+              typeFilter === t ? "bg-indigo-600 text-white border-indigo-600 shadow-inner" : unselectedCls
+            }`}
+          >
+            {t === "all" ? "All types" : t}
+          </button>
+        ))}
       </div>
 
       <EventsCombined

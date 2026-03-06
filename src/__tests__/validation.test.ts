@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateRsvpInput, validateEventInput } from "@/services/validation";
+import { validateRsvpInput, validateEventInput, validateInterestInput } from "@/services/validation";
 
 describe("validateRsvpInput", () => {
   it("accepts valid input", () => {
@@ -450,6 +450,223 @@ describe("validateEventInput", () => {
     expect(result.valid).toBe(false);
     if (!result.valid) {
       expect(result.errors.some((e) => e.field === "maxAttendees")).toBe(true);
+    }
+  });
+
+  // ── eventCategory ───────────────────────────────────────────────────────
+
+  it("defaults eventCategory to 'class' when omitted", () => {
+    const result = validateEventInput(validEvent);
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.eventCategory).toBe("class");
+    }
+  });
+
+  it("accepts every valid event category", () => {
+    for (const cat of ["festival", "workshop", "class", "jam"]) {
+      const result = validateEventInput({ ...validEvent, eventCategory: cat });
+      expect(result.valid).toBe(true);
+      if (result.valid) {
+        expect(result.data.eventCategory).toBe(cat);
+      }
+    }
+  });
+
+  it("rejects an unrecognised event category", () => {
+    const result = validateEventInput({ ...validEvent, eventCategory: "meetup" } as any);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "eventCategory")).toBe(true);
+    }
+  });
+
+  // ── isExternal + externalUrl ────────────────────────────────────────────
+
+  it("defaults isExternal to false when omitted", () => {
+    const result = validateEventInput(validEvent);
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.isExternal).toBe(false);
+    }
+  });
+
+  it("accepts isExternal=true with a valid externalUrl", () => {
+    const result = validateEventInput({
+      ...validEvent,
+      isExternal: true,
+      externalUrl: "https://example.com/book",
+    });
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.isExternal).toBe(true);
+      expect(result.data.externalUrl).toBe("https://example.com/book");
+    }
+  });
+
+  it("rejects isExternal=true without externalUrl", () => {
+    const result = validateEventInput({
+      ...validEvent,
+      isExternal: true,
+    });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "externalUrl")).toBe(true);
+    }
+  });
+
+  it("rejects non-boolean isExternal", () => {
+    const result = validateEventInput({
+      ...validEvent,
+      isExternal: "yes",
+    } as any);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "isExternal")).toBe(true);
+    }
+  });
+
+  it("rejects externalUrl that is not a valid URL", () => {
+    const result = validateEventInput({
+      ...validEvent,
+      isExternal: true,
+      externalUrl: "not-a-url",
+    });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "externalUrl")).toBe(true);
+    }
+  });
+
+  it("allows externalUrl to be null when isExternal is false", () => {
+    const result = validateEventInput({
+      ...validEvent,
+      isExternal: false,
+      externalUrl: null,
+    });
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.externalUrl).toBeNull();
+    }
+  });
+
+  it("rejects externalUrl over 2000 characters", () => {
+    const result = validateEventInput({
+      ...validEvent,
+      isExternal: true,
+      externalUrl: "https://example.com/" + "x".repeat(2000),
+    });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "externalUrl")).toBe(true);
+    }
+  });
+
+  // ── posterUrl ───────────────────────────────────────────────────────────
+
+  it("defaults posterUrl to null when omitted", () => {
+    const result = validateEventInput(validEvent);
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.posterUrl).toBeNull();
+    }
+  });
+
+  it("accepts a valid posterUrl", () => {
+    const result = validateEventInput({
+      ...validEvent,
+      posterUrl: "https://example.com/poster.jpg",
+    });
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.posterUrl).toBe("https://example.com/poster.jpg");
+    }
+  });
+
+  it("rejects posterUrl that is not a valid URL", () => {
+    const result = validateEventInput({
+      ...validEvent,
+      posterUrl: "not-a-url",
+    });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "posterUrl")).toBe(true);
+    }
+  });
+
+  it("stores null posterUrl for empty string", () => {
+    const result = validateEventInput({
+      ...validEvent,
+      posterUrl: "",
+    });
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.posterUrl).toBeNull();
+    }
+  });
+
+  it("rejects posterUrl over 2000 characters", () => {
+    const result = validateEventInput({
+      ...validEvent,
+      posterUrl: "https://example.com/" + "x".repeat(2000),
+    });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "posterUrl")).toBe(true);
+    }
+  });
+});
+
+// ── validateInterestInput ──────────────────────────────────────────────────
+
+describe("validateInterestInput", () => {
+  it("accepts valid input", () => {
+    const result = validateInterestInput({ eventId: "evt-1" });
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.eventId).toBe("evt-1");
+    }
+  });
+
+  it("trims eventId whitespace", () => {
+    const result = validateInterestInput({ eventId: "  evt-1  " });
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.eventId).toBe("evt-1");
+    }
+  });
+
+  it("rejects missing eventId", () => {
+    const result = validateInterestInput({});
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "eventId")).toBe(true);
+    }
+  });
+
+  it("rejects empty eventId", () => {
+    const result = validateInterestInput({ eventId: "  " });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "eventId")).toBe(true);
+    }
+  });
+
+  it("rejects null body", () => {
+    const result = validateInterestInput(null);
+    expect(result.valid).toBe(false);
+  });
+
+  it("rejects non-object body", () => {
+    const result = validateInterestInput("string");
+    expect(result.valid).toBe(false);
+  });
+
+  it("rejects numeric eventId", () => {
+    const result = validateInterestInput({ eventId: 42 });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.field === "eventId")).toBe(true);
     }
   });
 });

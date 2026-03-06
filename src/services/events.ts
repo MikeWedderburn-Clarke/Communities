@@ -2,7 +2,7 @@ import { eq, and, isNotNull, isNull, sql } from "drizzle-orm";
 import type { Db } from "@/db";
 import * as schema from "@/db/schema";
 import { computeNextOccurrence } from "@/lib/recurrence";
-import type { EventSummary, EventDetail, RoleCounts, Role, SkillLevel, TeacherRequest, PendingEvent, EventStatus, CreateEventInput, Location, RecurrenceRule } from "@/types";
+import type { EventSummary, EventDetail, RoleCounts, Role, SkillLevel, EventCategory, TeacherRequest, PendingEvent, EventStatus, CreateEventInput, Location, RecurrenceRule } from "@/types";
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -89,6 +89,10 @@ type EventListRow = {
   costCurrency: string | null;
   concessionAmount: number | null;
   maxAttendees: number | null;
+  eventCategory: string;
+  isExternal: boolean;
+  externalUrl: string | null;
+  posterUrl: string | null;
   rsvpRole: string | null;
   rsvpIsTeaching: boolean | null;
   rsvpOccurrenceDate: string | null;
@@ -142,6 +146,12 @@ function groupEventRows(rows: EventListRow[]): EventSummary[] {
         groupId: null,
         groupName: null,
         hasTicketTypes: false,
+        eventCategory: row.eventCategory as EventCategory,
+        isExternal: row.isExternal,
+        externalUrl: row.externalUrl,
+        posterUrl: row.posterUrl,
+        interestedCount: 0, // populated by page.tsx after getInterestCounts
+        isInterested: false, // populated by page.tsx after getUserInterestSet
       });
     }
     if (row.rsvpRole !== null) {
@@ -210,6 +220,10 @@ const EVENT_LIST_SELECT = (s: typeof schema) => ({
   costCurrency: s.events.costCurrency,
   concessionAmount: s.events.concessionAmount,
   maxAttendees: s.events.maxAttendees,
+  eventCategory: s.events.eventCategory,
+  isExternal: s.events.isExternal,
+  externalUrl: s.events.externalUrl,
+  posterUrl: s.events.posterUrl,
   rsvpRole: s.rsvps.role,
   rsvpIsTeaching: s.rsvps.isTeaching,
   rsvpOccurrenceDate: s.rsvps.occurrenceDate,
@@ -264,6 +278,10 @@ export async function getEventDetail(
       costCurrency: schema.events.costCurrency,
       concessionAmount: schema.events.concessionAmount,
       maxAttendees: schema.events.maxAttendees,
+      eventCategory: schema.events.eventCategory,
+      isExternal: schema.events.isExternal,
+      externalUrl: schema.events.externalUrl,
+      posterUrl: schema.events.posterUrl,
       locationId: schema.locations.id,
       locationName: schema.locations.name,
       locationCity: schema.locations.city,
@@ -359,6 +377,12 @@ export async function getEventDetail(
     groupId: null,
     groupName: null,
     hasTicketTypes: false,
+    eventCategory: eventRow.eventCategory as EventCategory,
+    isExternal: eventRow.isExternal,
+    externalUrl: eventRow.externalUrl,
+    posterUrl: eventRow.posterUrl,
+    interestedCount: 0, // populated by caller via getEventInterestInfo
+    isInterested: false, // populated by caller via getEventInterestInfo
     ticketTypes: [],
     userBooking: null,
   };
@@ -522,6 +546,10 @@ export async function createEvent(
     costCurrency: input.costCurrency,
     concessionAmount: input.concessionAmount,
     maxAttendees: input.maxAttendees,
+    eventCategory: input.eventCategory,
+    isExternal: input.isExternal,
+    externalUrl: input.externalUrl,
+    posterUrl: input.posterUrl,
     status,
     createdBy,
     dateAdded: now,
@@ -561,4 +589,107 @@ export async function rejectEvent(db: Db, eventId: string): Promise<void> {
     .update(schema.events)
     .set({ status: "rejected" })
     .where(eq(schema.events.id, eventId));
+}
+
+// ── Interest (watchlist) ───────────────────────────────────────────
+
+/**
+ * Toggle interest: if the user is interested, remove it; otherwise add it.
+ * Returns the new state.
+ */
+export async function toggleInterest(
+  db: Db,
+  userId: string,
+  eventId: string
+): Promise<{ interested: boolean }> {
+  const [existing] = await db
+    .select({ eventId: schema.eventInterests.eventId })
+    .from(schema.eventInterests)
+    .where(
+      and(
+        eq(schema.eventInterests.eventId, eventId),
+        eq(schema.eventInterests.userId, userId)
+      )
+    )
+    .limit(1);
+
+  if (existing) {
+    await db
+      .delete(schema.eventInterests)
+      .where(
+        and(
+          eq(schema.eventInterests.eventId, eventId),
+          eq(schema.eventInterests.userId, userId)
+        )
+      );
+    return { interested: false };
+  } else {
+    await db
+      .insert(schema.eventInterests)
+      .values({ eventId, userId, createdAt: new Date().toISOString() });
+    return { interested: true };
+  }
+}
+
+/** Returns a Set of event IDs the user is interested in. */
+export async function getUserInterestSet(
+  db: Db,
+  userId: string
+): Promise<Set<string>> {
+  const rows = await db
+    .select({ eventId: schema.eventInterests.eventId })
+    .from(schema.eventInterests)
+    .where(eq(schema.eventInterests.userId, userId));
+  return new Set(rows.map((r) => r.eventId));
+}
+
+/** Returns interested count per event for a list of event IDs. */
+export async function getInterestCounts(
+  db: Db,
+  eventIds: string[]
+): Promise<Record<string, number>> {
+  if (eventIds.length === 0) return {};
+  const rows = await db
+    .select({
+      eventId: schema.eventInterests.eventId,
+      count: sql<number>`count(*)`.as("count"),
+    })
+    .from(schema.eventInterests)
+    .where(sql`${schema.eventInterests.eventId} IN (${sql.join(eventIds.map(id => sql`${id}`), sql`, `)})`)
+    .groupBy(schema.eventInterests.eventId);
+  const map: Record<string, number> = {};
+  for (const row of rows) {
+    map[row.eventId] = Number(row.count);
+  }
+  return map;
+}
+
+/** Returns interested count and whether a specific user is interested for a single event. */
+export async function getEventInterestInfo(
+  db: Db,
+  eventId: string,
+  userId: string | null
+): Promise<{ interestedCount: number; isInterested: boolean }> {
+  const countRows = await db
+    .select({ count: sql<number>`count(*)`.as("count") })
+    .from(schema.eventInterests)
+    .where(eq(schema.eventInterests.eventId, eventId));
+  const interestedCount = Number(countRows[0]?.count ?? 0);
+
+  let isInterested = false;
+  if (userId) {
+    const [existing] = await db
+      .select({ eventId: schema.eventInterests.eventId })
+      .from(schema.eventInterests)
+      .where(
+        and(
+          eq(schema.eventInterests.eventId, eventId),
+          eq(schema.eventInterests.userId, userId)
+        )
+      )
+      .limit(1);
+    isInterested = !!existing;
+  }
+
+  return { interestedCount, isInterested };
 }

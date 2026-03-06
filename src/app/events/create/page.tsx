@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, type FormEvent } from "react";
-import { SKILL_LEVELS, CURRENCIES, type Location, type SkillLevel } from "@/types";
+import { SKILL_LEVELS, CURRENCIES, EVENT_CATEGORIES, type Location, type SkillLevel, type EventCategory } from "@/types";
 
 /* ── Nominatim geocoding types ────────────────────────────────── */
 interface NominatimResult {
@@ -67,6 +67,10 @@ export default function CreateEventPage() {
   const [costCurrency, setCostCurrency] = useState("GBP");
   const [concessionAmount, setConcessionAmount] = useState("");
   const [maxAttendees, setMaxAttendees] = useState("");
+  const [eventCategory, setEventCategory] = useState<EventCategory>("class");
+  const [isExternal, setIsExternal] = useState(false);
+  const [externalUrl, setExternalUrl] = useState("");
+  const [posterUrl, setPosterUrl] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -243,6 +247,10 @@ export default function CreateEventPage() {
       costCurrency: costAmount !== "" ? costCurrency : null,
       concessionAmount: concessionAmount !== "" ? parseFloat(concessionAmount) : null,
       maxAttendees: maxAttendees !== "" ? parseInt(maxAttendees, 10) : null,
+      eventCategory,
+      isExternal,
+      externalUrl: externalUrl.trim() || null,
+      posterUrl: posterUrl.trim() || null,
     };
 
     try {
@@ -375,6 +383,75 @@ export default function CreateEventPage() {
             className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
             placeholder="What's the event about? Level, what to bring, etc."
           />
+        </div>
+
+        {/* Event category */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Category</label>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {EVENT_CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setEventCategory(cat)}
+                className={`rounded-full border px-3 py-1 text-sm capitalize transition ${
+                  eventCategory === cat
+                    ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                    : "border-gray-200 hover:border-gray-300"
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* External event toggle + URLs */}
+        <div className="rounded-lg border border-gray-200 bg-white/60 p-4 space-y-3">
+          <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+            <input
+              type="checkbox"
+              checked={isExternal}
+              onChange={(e) => {
+                setIsExternal(e.target.checked);
+                if (!e.target.checked) setExternalUrl("");
+              }}
+              className="rounded border-gray-300"
+            />
+            External event (booking handled elsewhere)
+          </label>
+          <p className="text-xs text-gray-500">
+            Check this if attendees book through an external website. You can still track interest and attendance within the app.
+          </p>
+
+          {isExternal && (
+            <div>
+              <label htmlFor="externalUrl" className="block text-sm text-gray-600">Booking URL</label>
+              <input
+                id="externalUrl"
+                type="url"
+                value={externalUrl}
+                onChange={(e) => setExternalUrl(e.target.value)}
+                required={isExternal}
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                placeholder="https://example.com/event-booking"
+              />
+            </div>
+          )}
+
+          <div>
+            <label htmlFor="posterUrl" className="block text-sm text-gray-600">
+              Poster image URL <span className="text-gray-400">(optional)</span>
+            </label>
+            <input
+              id="posterUrl"
+              type="url"
+              value={posterUrl}
+              onChange={(e) => setPosterUrl(e.target.value)}
+              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+              placeholder="https://example.com/poster.jpg"
+            />
+          </div>
         </div>
 
         {/* Skill level */}
