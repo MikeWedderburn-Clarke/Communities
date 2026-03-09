@@ -10,7 +10,7 @@ import { buildExternalMapLinks } from "@/lib/map-links";
 import { isEventNew } from "@/lib/event-utils";
 import { formatRecurrenceSummary } from "@/lib/recurrence";
 import { formatCost } from "@/lib/format-cost";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { RsvpForm } from "./rsvp-form";
 import { InterestButton } from "./interest-button";
 import { TicketSelector } from "@/components/ticket-selector";
@@ -26,6 +26,7 @@ export default async function EventDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ from?: string }>;
 }) {
+  const db = await getDb();
   const { id } = await params;
   const { from } = await searchParams;
   const user = await getCurrentUser();

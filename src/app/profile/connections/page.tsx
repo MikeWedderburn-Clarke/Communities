@@ -3,11 +3,12 @@ import Link from "next/link";
 import { Header } from "@/components/header";
 import { getCurrentUser } from "@/lib/auth";
 import { getOutgoingRelationships, getFollowers } from "@/services/users";
-import { db } from "@/db";
+import { getDb } from "@/db";
 
 export const dynamic = "force-dynamic";
 
 export default async function ConnectionsPage() {
+  const db = await getDb();
   const user = await getCurrentUser();
   if (!user) {
     redirect("/login");

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { setRelationship, getRelationship } from "@/services/users";
 import { RELATIONSHIP_TYPES } from "@/types";
 
 export async function GET(request: NextRequest) {
+  const db = await getDb();
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
@@ -20,6 +21,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const db = await getDb();
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });

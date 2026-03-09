@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Header } from "@/components/header";
 import { getCurrentUser } from "@/lib/auth";
 import { getPublicProfile } from "@/services/users";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { RelationshipButton } from "./relationship-button";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +13,7 @@ export default async function PublicProfilePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const db = await getDb();
   const user = await getCurrentUser();
   if (!user) {
     redirect("/login");

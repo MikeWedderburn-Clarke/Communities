@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { createTicketType } from "@/services/ticket-types";
 import { validateCreateTicketTypeInput } from "@/services/validation";
 
@@ -8,6 +8,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const db = await getDb();
   const user = await getCurrentUser();
   if (!user?.isAdmin) {
     return NextResponse.json({ error: "Admin required" }, { status: 403 });

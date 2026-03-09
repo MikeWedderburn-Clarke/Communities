@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { updateTicketType } from "@/services/ticket-types";
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const db = await getDb();
   const user = await getCurrentUser();
   if (!user?.isAdmin) {
     return NextResponse.json({ error: "Admin required" }, { status: 403 });

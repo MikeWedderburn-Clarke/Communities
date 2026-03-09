@@ -11,7 +11,9 @@
     "test:watch": "vitest",
     "db:generate": "npx drizzle-kit generate",
     "db:migrate": "npx drizzle-kit migrate",
+    "db:migrate-test": "DATABASE_URL=${TEST_DATABASE_URL:-postgres://postgres:postgres@localhost:5432/communities_test} npx drizzle-kit migrate",
     "db:seed": "npx tsx src/db/seed.ts",
+    "db:seed-test": "npx tsx src/db/seed-test.ts",
     "db:dump": "docker exec communities-db pg_dump -U postgres -Fc communities > backup.dump",
     "db:restore": "docker exec -i communities-db pg_restore -U postgres -d communities --clean --if-exists < backup.dump"
   },

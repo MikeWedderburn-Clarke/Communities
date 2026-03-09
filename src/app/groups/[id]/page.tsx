@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { getEventGroupById } from "@/services/event-groups";
 import { getBookingsForUser } from "@/services/bookings";
 import { getCurrentUser } from "@/lib/auth";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +27,7 @@ export default async function GroupPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const db = await getDb();
   const { id } = await params;
   const user = await getCurrentUser();
 

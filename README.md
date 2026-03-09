@@ -20,15 +20,19 @@ A public, SEO-friendly events platform for the worldwide AcroYoga community — 
 **Requires Node.js 22+ and Docker.**
 
 ```bash
-docker compose up -d           # start PostgreSQL
+docker compose up -d           # start PostgreSQL (creates both `communities` and `communities_test`)
 npm install                    # install dependencies
 cp .env.local.example .env.local
-npm run db:migrate             # apply schema
-npm run db:seed                # seed sample data
+npm run db:migrate             # apply schema to live db
+npm run db:seed                # seed live db with sample data
+npm run db:migrate-test        # apply schema to test db
+npm run db:seed-test           # seed test db with comprehensive test data
 npm run dev                    # → http://localhost:3000
 ```
 
 > Set `MOCK_AUTH=true` in `.env.local` to use the dev user-picker (no passwords needed).
+>
+> Admins can toggle between the live and test databases using the **LIVE DB / TEST DB** button in the top navigation bar. A yellow banner appears while test mode is active.
 
 ## 📖 Documentation
 

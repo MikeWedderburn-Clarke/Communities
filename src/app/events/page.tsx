@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { EventsContent } from "./events-content";
 import { getAllEvents, getUserRsvpMap, getUserInterestSet, getInterestCounts } from "@/services/events";
 import { getCurrentUser } from "@/lib/auth";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import type { Role } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +12,7 @@ interface Props {
 }
 
 export default async function EventsPage({ searchParams }: Props) {
+  const db = await getDb();
   const { city } = await searchParams;
   const user = await getCurrentUser();
   const rawEvents = await getAllEvents(db);
