@@ -2,12 +2,13 @@ import { redirect } from "next/navigation";
 import { Header } from "@/components/header";
 import { getCurrentUser } from "@/lib/auth";
 import { getUserProfile } from "@/services/users";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { ProfileForm } from "./profile-form";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProfilePage() {
+  const db = await getDb();
   const user = await getCurrentUser();
   if (!user) {
     redirect("/login?redirect=/profile");

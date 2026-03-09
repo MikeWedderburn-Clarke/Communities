@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { getEventGroupById } from "@/services/event-groups";
 import { getTeacherReport } from "@/services/teacher-splits";
 import { getCurrentUser } from "@/lib/auth";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +16,7 @@ export default async function TeacherReportPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const db = await getDb();
   const { id } = await params;
   const user = await getCurrentUser();
   if (!user?.isAdmin) redirect("/");

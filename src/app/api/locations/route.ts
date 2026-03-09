@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { searchLocations, getAllLocations, createLocation } from "@/services/locations";
 import { validateLocationInput } from "@/services/validation";
 
 export async function GET(request: NextRequest) {
+  const db = await getDb();
   const q = request.nextUrl.searchParams.get("q");
 
   const locations = q
@@ -15,6 +16,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const db = await getDb();
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });

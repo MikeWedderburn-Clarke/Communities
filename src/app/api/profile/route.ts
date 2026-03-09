@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { validateProfileInput, updateUserProfile } from "@/services/users";
 
 export async function PUT(request: NextRequest) {
+  const db = await getDb();
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json(

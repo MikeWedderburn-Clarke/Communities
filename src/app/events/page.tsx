@@ -3,7 +3,7 @@ import Link from "next/link";
 import { EventsContent } from "./events-content";
 import { getAllEvents, getUserRsvpMap, getUserInterestSet, getInterestCounts, getAllEventsRaw } from "@/services/events";
 import { getCurrentUser } from "@/lib/auth";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import type { Role } from "@/types";
 import { EventsTable } from "./events-table";
 
@@ -14,6 +14,7 @@ interface Props {
 }
 
 export default async function EventsPage({ searchParams }: Props) {
+  const db = await getDb();
   const { city, view } = await searchParams;
   const user = await getCurrentUser();
 

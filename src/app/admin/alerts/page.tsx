@@ -3,11 +3,12 @@ import { revalidatePath } from "next/cache";
 import { Header } from "@/components/header";
 import { getCurrentUser } from "@/lib/auth";
 import { getPendingTeacherRequests, approveTeacher, denyTeacher, getPendingEvents, approveEvent, rejectEvent } from "@/services/events";
-import { db } from "@/db";
+import { getDb } from "@/db";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminAlertsPage() {
+  const db = await getDb();
   const user = await getCurrentUser();
   if (!user || !user.isAdmin) {
     redirect("/events");

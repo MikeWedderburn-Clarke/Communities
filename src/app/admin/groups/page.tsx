@@ -1,12 +1,13 @@
 import { listEventGroups } from "@/services/event-groups";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminGroupsPage() {
+  const db = await getDb();
   const user = await getCurrentUser();
   if (!user?.isAdmin) redirect("/");
 

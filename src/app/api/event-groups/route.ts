@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { createEventGroup, listEventGroups } from "@/services/event-groups";
 import { validateCreateEventGroupInput } from "@/services/validation";
 
 export async function GET() {
+  const db = await getDb();
   const user = await getCurrentUser();
   if (!user?.isAdmin) {
     return NextResponse.json({ error: "Admin required" }, { status: 403 });
@@ -14,6 +15,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const db = await getDb();
   const user = await getCurrentUser();
   if (!user?.isAdmin) {
     return NextResponse.json({ error: "Admin required" }, { status: 403 });

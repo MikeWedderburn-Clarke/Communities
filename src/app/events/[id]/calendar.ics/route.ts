@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { getEventDetail } from "@/services/events";
 import { generateIcs } from "@/services/ics";
 
@@ -7,6 +7,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const db = await getDb();
   const { id } = await params;
   const event = await getEventDetail(db, id, null);
 

@@ -2,11 +2,12 @@ import { Suspense } from "react";
 import { UsersContent } from "./users-content";
 import { getAllUsers } from "@/services/users";
 import { getCurrentUser } from "@/lib/auth";
-import { db } from "@/db";
+import { getDb } from "@/db";
 
 export const dynamic = "force-dynamic";
 
 export default async function UsersPage() {
+  const db = await getDb();
   const user = await getCurrentUser();
   const isAdmin = user?.isAdmin ?? false;
   const users = await getAllUsers(db, isAdmin);

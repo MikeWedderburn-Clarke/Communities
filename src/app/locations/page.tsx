@@ -1,11 +1,12 @@
 import { Suspense } from "react";
 import { LocationsContent } from "./locations-content";
 import { getAllLocationsWithCreatedBy } from "@/services/locations";
-import { db } from "@/db";
+import { getDb } from "@/db";
 
 export const dynamic = "force-dynamic";
 
 export default async function LocationsPage() {
+  const db = await getDb();
   const locations = await getAllLocationsWithCreatedBy(db);
 
   return (
