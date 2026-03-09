@@ -3,7 +3,7 @@ import type { Db } from "@/db";
 import * as schema from "@/db/schema";
 import { computeNextOccurrence } from "@/lib/recurrence";
 import { batchCanViewSocialLinks } from "@/services/users";
-import type { EventSummary, EventDetail, RoleCounts, Role, SkillLevel, EventCategory, TeacherRequest, PendingEvent, EventStatus, CreateEventInput, Location, RecurrenceRule } from "@/types";
+import type { EventSummary, EventDetail, EventRow, RoleCounts, Role, SkillLevel, EventCategory, RecurrenceFrequency, TeacherRequest, PendingEvent, EventStatus, CreateEventInput, Location, RecurrenceRule } from "@/types";
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -703,4 +703,72 @@ export async function getEventInterestInfo(
   }
 
   return { interestedCount, isInterested };
+}
+
+/**
+ * Return all events as raw rows for the events table view.
+ * Includes location name and creator name for display.
+ * Admin-only: includes all statuses; regular callers see all statuses too
+ * since status is a visible column in this view.
+ */
+export async function getAllEventsRaw(db: Db): Promise<EventRow[]> {
+  const createdByAlias = schema.users;
+  const rows = await db
+    .select({
+      id: schema.events.id,
+      title: schema.events.title,
+      description: schema.events.description,
+      dateTime: schema.events.dateTime,
+      endDateTime: schema.events.endDateTime,
+      locationId: schema.events.locationId,
+      locationName: schema.locations.name,
+      status: schema.events.status,
+      createdBy: schema.events.createdBy,
+      createdByName: createdByAlias.name,
+      dateAdded: schema.events.dateAdded,
+      lastUpdated: schema.events.lastUpdated,
+      recurrenceType: schema.events.recurrenceType,
+      recurrenceEndDate: schema.events.recurrenceEndDate,
+      skillLevel: schema.events.skillLevel,
+      prerequisites: schema.events.prerequisites,
+      costAmount: schema.events.costAmount,
+      costCurrency: schema.events.costCurrency,
+      concessionAmount: schema.events.concessionAmount,
+      maxAttendees: schema.events.maxAttendees,
+      eventCategory: schema.events.eventCategory,
+      isExternal: schema.events.isExternal,
+      externalUrl: schema.events.externalUrl,
+      posterUrl: schema.events.posterUrl,
+    })
+    .from(schema.events)
+    .innerJoin(schema.locations, eq(schema.events.locationId, schema.locations.id))
+    .leftJoin(createdByAlias, eq(schema.events.createdBy, createdByAlias.id))
+    .orderBy(schema.events.dateTime);
+
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    dateTime: row.dateTime,
+    endDateTime: row.endDateTime,
+    locationId: row.locationId,
+    locationName: row.locationName,
+    status: row.status as EventStatus,
+    createdBy: row.createdBy ?? null,
+    createdByName: row.createdByName ?? null,
+    dateAdded: row.dateAdded,
+    lastUpdated: row.lastUpdated,
+    recurrenceType: row.recurrenceType as RecurrenceFrequency,
+    recurrenceEndDate: row.recurrenceEndDate ?? null,
+    skillLevel: row.skillLevel as SkillLevel,
+    prerequisites: row.prerequisites ?? null,
+    costAmount: row.costAmount ?? null,
+    costCurrency: row.costCurrency ?? null,
+    concessionAmount: row.concessionAmount ?? null,
+    maxAttendees: row.maxAttendees ?? null,
+    eventCategory: row.eventCategory as EventCategory,
+    isExternal: row.isExternal,
+    externalUrl: row.externalUrl ?? null,
+    posterUrl: row.posterUrl ?? null,
+  }));
 }

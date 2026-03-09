@@ -1,7 +1,7 @@
 import { eq, and, like, or } from "drizzle-orm";
 import type { Db } from "@/db";
 import * as schema from "@/db/schema";
-import type { Location, CreateLocationInput } from "@/types";
+import type { Location, LocationRow, CreateLocationInput } from "@/types";
 
 export async function getLocationById(db: Db, id: string): Promise<Location | null> {
   const [row] = await db
@@ -86,4 +86,37 @@ export async function createLocation(
     createdBy,
   });
   return id;
+}
+
+/** Return all locations with createdBy user name for table views. */
+export async function getAllLocationsWithCreatedBy(db: Db): Promise<LocationRow[]> {
+  const rows = await db
+    .select({
+      id: schema.locations.id,
+      name: schema.locations.name,
+      city: schema.locations.city,
+      country: schema.locations.country,
+      latitude: schema.locations.latitude,
+      longitude: schema.locations.longitude,
+      what3names: schema.locations.what3names,
+      howToFind: schema.locations.howToFind,
+      createdBy: schema.locations.createdBy,
+      createdByName: schema.users.name,
+    })
+    .from(schema.locations)
+    .leftJoin(schema.users, eq(schema.locations.createdBy, schema.users.id))
+    .orderBy(schema.locations.country, schema.locations.city, schema.locations.name);
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    city: row.city,
+    country: row.country,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    what3names: row.what3names ?? null,
+    howToFind: row.howToFind ?? null,
+    createdBy: row.createdBy ?? null,
+    createdByName: row.createdByName ?? null,
+  }));
 }

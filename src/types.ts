@@ -389,3 +389,61 @@ export interface ContinentGroup {
 }
 
 export type LocationHierarchy = ContinentGroup[];
+
+// ── Table view row types ──────────────────────────────────────────
+
+/** Raw event row for the events table view (all columns). */
+export interface EventRow {
+  id: string;
+  title: string;
+  description: string;
+  dateTime: string;
+  endDateTime: string;
+  locationId: string;
+  locationName: string;
+  status: EventStatus;
+  createdBy: string | null;
+  createdByName: string | null;
+  dateAdded: string;
+  lastUpdated: string;
+  recurrenceType: RecurrenceFrequency;
+  recurrenceEndDate: string | null;
+  skillLevel: SkillLevel;
+  prerequisites: string | null;
+  costAmount: number | null;
+  costCurrency: string | null;
+  concessionAmount: number | null;
+  maxAttendees: number | null;
+  eventCategory: EventCategory;
+  isExternal: boolean;
+  externalUrl: string | null;
+  posterUrl: string | null;
+}
+
+/** User row for the users table view (admin sees all fields; public sees limited). */
+export interface UserRow {
+  id: string;
+  name: string;
+  email: string | null;
+  isAdmin: boolean;
+  isTeacherApproved: boolean;
+  teacherRequestedAt: string | null;
+  teacherApprovedBy: string | null;
+  defaultRole: Role | null;
+  defaultShowName: boolean | null;
+  facebookUrl: string | null;
+  instagramUrl: string | null;
+  websiteUrl: string | null;
+  youtubeUrl: string | null;
+  profileVisibility: ProfileVisibility;
+  homeCity: string | null;
+  useCurrentLocation: boolean;
+  lastLogin: string | null;
+  previousLogin: string | null;
+}
+
+/** Location row for the locations table view (all columns, with createdBy name). */
+export interface LocationRow extends Location {
+  createdBy: string | null;
+  createdByName: string | null;
+}

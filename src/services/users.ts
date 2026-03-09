@@ -1,7 +1,7 @@
 import { eq, and, sql } from "drizzle-orm";
 import type { Db } from "@/db";
 import * as schema from "@/db/schema";
-import type { UserProfile, PublicProfile, Role, RelationshipType, ProfileVisibility } from "@/types";
+import type { UserProfile, PublicProfile, UserRow, Role, RelationshipType, ProfileVisibility } from "@/types";
 import { ROLES, PROFILE_VISIBILITY_TIERS } from "@/types";
 
 // ── Profile queries ──────────────────────────────────────────────
@@ -373,4 +373,37 @@ export async function batchCanViewSocialLinks(
   }
 
   return canView;
+}
+
+/**
+ * Return all users for the users table view.
+ * - isAdmin=true: returns all fields for all users.
+ * - isAdmin=false: returns only users with profileVisibility="everyone",
+ *   and omits email, isAdmin, teacherApprovedBy, and previousLogin.
+ */
+export async function getAllUsers(db: Db, isAdmin: boolean): Promise<UserRow[]> {
+  const rows = await db.select().from(schema.users).orderBy(schema.users.name);
+
+  return rows
+    .filter((u) => isAdmin || u.profileVisibility === "everyone")
+    .map((u) => ({
+      id: u.id,
+      name: u.name,
+      email: isAdmin ? u.email : null,
+      isAdmin: u.isAdmin,
+      isTeacherApproved: u.isTeacherApproved,
+      teacherRequestedAt: u.teacherRequestedAt ?? null,
+      teacherApprovedBy: isAdmin ? (u.teacherApprovedBy ?? null) : null,
+      defaultRole: (u.defaultRole as Role) ?? null,
+      defaultShowName: u.defaultShowName ?? null,
+      facebookUrl: u.facebookUrl ?? null,
+      instagramUrl: u.instagramUrl ?? null,
+      websiteUrl: u.websiteUrl ?? null,
+      youtubeUrl: u.youtubeUrl ?? null,
+      profileVisibility: (u.profileVisibility ?? "everyone") as ProfileVisibility,
+      homeCity: u.homeCity ?? null,
+      useCurrentLocation: u.useCurrentLocation,
+      lastLogin: u.lastLogin ?? null,
+      previousLogin: isAdmin ? (u.previousLogin ?? null) : null,
+    }));
 }
