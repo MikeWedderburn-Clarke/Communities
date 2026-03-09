@@ -40,7 +40,7 @@ export default async function EventsPage({ searchParams }: Props) {
         </div>
         <ViewToggle view="table" />
         <Suspense fallback={<p className="mt-8 text-gray-400">Loading…</p>}>
-          <EventsTable events={rawRows} locationOptions={[]} userOptions={[]} />
+          <EventsTable events={rawRows} />
         </Suspense>
       </main>
     );

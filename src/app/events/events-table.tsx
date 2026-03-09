@@ -13,8 +13,6 @@ import {
 
 interface Props {
   events: EventRow[];
-  locationOptions: string[];
-  userOptions: string[];
 }
 
 const STATUS_BADGE: Record<string, string> = {
