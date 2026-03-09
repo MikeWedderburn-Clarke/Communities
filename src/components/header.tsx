@@ -36,11 +36,14 @@ export async function Header() {
             <Link href="/events" className="text-sm hover:text-indigo-600">
               Events
             </Link>
+            <Link href="/users" className="text-sm hover:text-indigo-600">
+              Users
+            </Link>
+            <Link href="/locations" className="text-sm hover:text-indigo-600">
+              Locations
+            </Link>
             {user ? (
               <div className="flex items-center gap-3">
-                <Link href="/events/create" className="text-sm hover:text-indigo-600">
-                  + Create
-                </Link>
                 {user.isAdmin && (
                   <>
                     <DbModeToggle isTestMode={isTestMode} />
