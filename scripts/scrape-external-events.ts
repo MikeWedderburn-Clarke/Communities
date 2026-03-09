@@ -52,7 +52,12 @@ interface ScraperResult {
 
 // ── Extraction prompt (shared between modes) ────────────────────────
 
-const EXTRACTION_PROMPT = `Extract all AcroYoga / acrobatics / movement events from this newsletter text.
+const EXTRACTION_PROMPT = `Extract all AcroYoga / acrobatics / movement events from this newsletter content.
+
+The content includes:
+1. The post text (innerText)
+2. LINKS: all hyperlinks found in the post (text → URL)
+3. IMAGES: all image URLs found in the post
 
 For each event, return a JSON object with these fields:
 - name: string (event name)
@@ -60,8 +65,8 @@ For each event, return a JSON object with these fields:
 - endDate: string | null (ISO-8601 date, null if single-day)
 - city: string (city name)
 - country: string (country name)
-- bookingUrl: string | null (URL to book or get more info)
-- posterUrl: string | null (image URL if visible)
+- bookingUrl: string | null (use the most relevant URL from the LINKS section — prefer registration/booking/ticket links; fall back to the event website link)
+- posterUrl: string | null (use the most relevant image URL from the IMAGES section — prefer event flyer/poster images over logos or avatars)
 - category: "festival" | "workshop" | "class" | "jam" | null
 - description: string | null (brief 1-2 sentence description)
 
@@ -102,11 +107,12 @@ async function geocode(
 
 // ── LLM extraction (auto mode only) ────────────────────────────────
 
-async function extractEventsWithLLM(text: string): Promise<ExtractedEvent[]> {
+async function extractEventsWithLLM(post: ScrapedPost): Promise<ExtractedEvent[]> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is required for auto mode");
 
-  const prompt = `${EXTRACTION_PROMPT}\n\nNewsletter text:\n${text.slice(0, 30000)}`;
+  const content = buildLLMContent(post).slice(0, 50000);
+  const prompt = `${EXTRACTION_PROMPT}\n\nNewsletter content:\n${content}`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -150,6 +156,31 @@ interface ScrapedPost {
   title: string;
   date: string;
   textContent: string;
+  /** All hyperlinks found in the post article (text → href) */
+  links: { text: string; href: string }[];
+  /** All image src URLs found in the post article */
+  images: string[];
+}
+
+/**
+ * Build a single content string that includes text, links, and images so that
+ * an LLM can extract bookingUrl and posterUrl reliably.
+ */
+function buildLLMContent(post: ScrapedPost): string {
+  const parts: string[] = [post.textContent];
+
+  if (post.links.length > 0) {
+    parts.push(
+      "\n\nLINKS FOUND IN POST:\n" +
+        post.links.map((l) => `  ${l.text ? `[${l.text}] ` : ""}${l.href}`).join("\n"),
+    );
+  }
+
+  if (post.images.length > 0) {
+    parts.push("\n\nIMAGES FOUND IN POST:\n" + post.images.map((src) => `  ${src}`).join("\n"));
+  }
+
+  return parts.join("");
 }
 
 async function scrapeBeehiivPosts(source: ScrapeSource, maxPosts = 3): Promise<ScrapedPost[]> {
@@ -194,13 +225,49 @@ async function scrapeBeehiivPosts(source: ScrapeSource, maxPosts = 3): Promise<S
       try {
         await page.goto(post.url, { waitUntil: "networkidle", timeout: 30000 });
 
-        const textContent = await page.evaluate(() => {
+        const { textContent, links, images } = await page.evaluate(() => {
           const article =
             document.querySelector("article") ??
             document.querySelector('[class*="post"]') ??
             document.querySelector("main") ??
             document.body;
-          return article.innerText;
+
+          // Extract all meaningful links (skip nav/footer noise)
+          const UNSAFE_SCHEMES = ["javascript:", "data:", "vbscript:", "mailto:"];
+          const extractedLinks: { text: string; href: string }[] = [];
+          article.querySelectorAll("a[href]").forEach((a) => {
+            const href = (a as HTMLAnchorElement).href;
+            const text = a.textContent?.trim() ?? "";
+            const lowerHref = href.toLowerCase();
+            if (
+              href &&
+              href !== window.location.href &&
+              !UNSAFE_SCHEMES.some((s) => lowerHref.startsWith(s))
+            ) {
+              extractedLinks.push({ text, href });
+            }
+          });
+
+          // Extract all images (skip tiny icons / tracking pixels)
+          // Minimum 80×80 px threshold filters out logos, avatars, and 1×1 tracking pixels
+          const MIN_IMG_PX = 80;
+          const extractedImages: string[] = [];
+          article.querySelectorAll("img[src]").forEach((img) => {
+            const imgEl = img as HTMLImageElement;
+            const src = imgEl.src;
+            const w = imgEl.naturalWidth || imgEl.width;
+            const h = imgEl.naturalHeight || imgEl.height;
+            // Skip data URIs and tiny images (icons / tracking pixels)
+            if (src && !src.startsWith("data:") && w >= MIN_IMG_PX && h >= MIN_IMG_PX) {
+              extractedImages.push(src);
+            }
+          });
+
+          return {
+            textContent: article.innerText,
+            links: extractedLinks,
+            images: extractedImages,
+          };
         });
 
         if (!textContent || textContent.length < 100) {
@@ -208,8 +275,10 @@ async function scrapeBeehiivPosts(source: ScrapeSource, maxPosts = 3): Promise<S
           continue;
         }
 
-        console.log(`    Extracted ${textContent.length} chars`);
-        posts.push({ url: post.url, title: post.title, date: post.date, textContent });
+        console.log(
+          `    Extracted ${textContent.length} chars, ${links.length} links, ${images.length} images`,
+        );
+        posts.push({ url: post.url, title: post.title, date: post.date, textContent, links, images });
       } catch (err) {
         console.warn(`    Failed to read post: ${err}`);
       }
@@ -240,20 +309,22 @@ async function runScrape() {
 
     const dir = ensureScrapedDir(source.id);
 
-    // Save each post's text
+    // Save each post's text and extracted links/images
     for (let i = 0; i < posts.length; i++) {
       const post = posts[i];
       const slug = post.url.split("/p/")[1]?.replace(/[^a-z0-9-]/gi, "_") ?? `post-${i}`;
-      const textFile = path.join(dir, `${slug}.txt`);
-      fs.writeFileSync(textFile, post.textContent, "utf-8");
-      console.log(`  Saved: ${textFile}`);
+
+      // Save full LLM-ready content (text + links + images)
+      const contentFile = path.join(dir, `${slug}.txt`);
+      fs.writeFileSync(contentFile, buildLLMContent(post), "utf-8");
+      console.log(`  Saved: ${contentFile}`);
     }
 
     // Save the extraction prompt
     const promptFile = path.join(dir, "PROMPT.md");
     fs.writeFileSync(
       promptFile,
-      `# Event Extraction Prompt\n\nPaste the contents of each .txt file into GitHub Copilot Chat (or any LLM) together with this prompt. Save the resulting JSON array to \`events.json\` in this directory, then run:\n\n\`\`\`\nnpx tsx scripts/scrape-external-events.ts import\n\`\`\`\n\n---\n\n${EXTRACTION_PROMPT}\n\nNewsletter text:\n<paste the .txt file contents here>\n`,
+      `# Event Extraction Prompt\n\nEach .txt file contains the full newsletter content (post text, links, and images).\nPaste the contents of each .txt file into GitHub Copilot Chat (or any LLM) together with this prompt.\nSave the resulting JSON array to \`events.json\` in this directory, then run:\n\n\`\`\`\nnpx tsx scripts/scrape-external-events.ts import\n\`\`\`\n\n---\n\n${EXTRACTION_PROMPT}\n\nNewsletter content:\n<paste the .txt file contents here>\n`,
       "utf-8",
     );
 
@@ -508,7 +579,7 @@ async function runAuto() {
     for (const post of posts) {
       try {
         console.log(`  Sending to LLM: ${post.title}`);
-        const events = await extractEventsWithLLM(post.textContent);
+        const events = await extractEventsWithLLM(post);
         console.log(`  LLM found ${events.length} events`);
 
         for (const evt of events) {
@@ -555,7 +626,8 @@ async function runAuto() {
               lastUpdated: now,
               eventCategory: category,
               isExternal: true,
-              externalUrl: evt.bookingUrl,
+              // Fall back to the newsletter post URL if LLM didn't extract a booking URL
+              externalUrl: evt.bookingUrl ?? post.url,
               posterUrl: evt.posterUrl,
             });
 
