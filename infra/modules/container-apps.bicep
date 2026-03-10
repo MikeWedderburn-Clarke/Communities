@@ -15,6 +15,9 @@ param registryId string
 param databaseUrl string
 
 @secure()
+param testDatabaseUrl string
+
+@secure()
 param authSecret string
 
 param mockAuth string = 'false'
@@ -102,6 +105,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
       ]
       secrets: concat([
         { name: 'database-url', value: databaseUrl }
+        { name: 'test-database-url', value: testDatabaseUrl }
         { name: 'auth-secret', value: authSecret }
       ], entraSecrets)
     }
@@ -117,6 +121,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
           env: concat([
             { name: 'NODE_ENV', value: 'production' }
             { name: 'DATABASE_URL', secretRef: 'database-url' }
+            { name: 'TEST_DATABASE_URL', secretRef: 'test-database-url' }
             { name: 'AUTH_SECRET', secretRef: 'auth-secret' }
             { name: 'MOCK_AUTH', value: mockAuth }
             { name: 'AUTH_ENTRA_CLIENT_ID', value: entraClientId }
