@@ -90,6 +90,11 @@ jobs:
           npm ci
           npm run db:migrate
 
+      - name: Run test database migrations
+        env:
+          TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+        run: npm run db:migrate-test
+
       - name: Deploy to Azure Container Apps
         run: |
           az containerapp update \

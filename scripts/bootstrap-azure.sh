@@ -179,10 +179,11 @@ DB_ADMIN_PASSWORD="Ayc$(openssl rand -hex 12)1!"
 # NextAuth secret
 AUTH_SECRET="$(openssl rand -base64 32)"
 
-# Pre-build connection string using the names Bicep will create.
+# Pre-build connection strings using the names Bicep will create.
 # This matches the format in infra/modules/database.bicep.
 DB_FQDN="${DB_SERVER}.postgres.database.azure.com"
 DATABASE_URL="postgres://${DB_USER}:${DB_ADMIN_PASSWORD}@${DB_FQDN}:5432/${DB_NAME}?sslmode=require"
+TEST_DATABASE_URL="postgres://${DB_USER}:${DB_ADMIN_PASSWORD}@${DB_FQDN}:5432/communities_test?sslmode=require"
 
 echo "  ✓ Done"
 echo ""
@@ -200,6 +201,7 @@ printf "  %-28s = %s\n" "AZURE_TENANT_ID"       "${TENANT_ID}"
 printf "  %-28s = %s\n" "AZURE_SUBSCRIPTION_ID" "${SUBSCRIPTION_ID}"
 printf "  %-28s = %s\n" "DB_ADMIN_PASSWORD"     "${DB_ADMIN_PASSWORD}"
 printf "  %-28s = %s\n" "DATABASE_URL"           "${DATABASE_URL}"
+printf "  %-28s = %s\n" "TEST_DATABASE_URL"      "${TEST_DATABASE_URL}"
 printf "  %-28s = %s\n" "AUTH_SECRET"            "${AUTH_SECRET}"
 echo ""
 echo "── VARIABLES  (Settings → Secrets → Variables tab → New variable) ─────────"

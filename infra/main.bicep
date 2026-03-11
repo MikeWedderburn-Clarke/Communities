@@ -75,6 +75,7 @@ module containerApp 'modules/container-apps.bicep' = {
     registryLoginServer: registry.outputs.loginServer
     registryId: registry.outputs.registryId
     databaseUrl: database.outputs.connectionString
+    testDatabaseUrl: database.outputs.testConnectionString
     authSecret: authSecret
     mockAuth: mockAuth
     entraClientId: entraClientId

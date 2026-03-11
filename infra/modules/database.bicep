@@ -11,6 +11,7 @@ param adminPassword string
 
 param adminUser string = 'pgadmin'
 param databaseName string = 'communities'
+param testDatabaseName string = 'communities_test'
 
 resource server 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-preview' = {
   name: serverName
@@ -44,6 +45,11 @@ resource database 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2023-06-0
   name: databaseName
 }
 
+resource testDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2023-06-01-preview' = {
+  parent: server
+  name: testDatabaseName
+}
+
 // Allow all Azure-hosted services (Container Apps, etc.) to connect
 resource azureServicesFirewallRule 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2023-06-01-preview' = {
   parent: server
@@ -56,4 +62,5 @@ resource azureServicesFirewallRule 'Microsoft.DBforPostgreSQL/flexibleServers/fi
 
 // Connection string in the format expected by pg / drizzle-orm/node-postgres
 output connectionString string = 'postgres://${adminUser}:${adminPassword}@${server.properties.fullyQualifiedDomainName}:5432/${databaseName}?sslmode=require'
+output testConnectionString string = 'postgres://${adminUser}:${adminPassword}@${server.properties.fullyQualifiedDomainName}:5432/${testDatabaseName}?sslmode=require'
 output serverFqdn string = server.properties.fullyQualifiedDomainName
