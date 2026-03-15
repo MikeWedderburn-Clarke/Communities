@@ -8,3 +8,4 @@ tsconfig.tsbuildinfo
 .env*.local
 backup.dump
 scripts/scraped/
+specs/

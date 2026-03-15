@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ---
 
+## 2026-03-12
+
+- Added `specs/` to `.gitignore` for v2 spec-kit planning documents (constitution + 5 feature specs)
+- Created v2 spec files locally: constitution (10 principles, quality gates, governance), 001 Event Discovery & RSVP, 002 Community & Social, 003 Recurring & Multi-Day Events, 004 Permissions & Creator Accounts, 005 Teacher Profiles & Reviews
+
+---
+
 ## 2026-03-06
 
 - Internal/external events: `is_external`, `external_url`, and `poster_url` columns added to events; external events show a prominent "Book externally" link + poster image while still supporting in-app "going" RSVP tracking
