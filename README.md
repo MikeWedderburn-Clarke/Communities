@@ -43,6 +43,7 @@ npm run dev                    # → http://localhost:3000
 | Mock auth and Entra ID production setup | [Wiki: Authentication](../../wiki/Authentication) |
 | Azure Container Apps deployment | [Wiki: Deployment](../../wiki/Deployment) |
 | Architecture conventions and contributing | [Wiki: Architecture](../../wiki/Architecture) |
+| Events map view (Leaflet) | [Wiki: Events Map](../../wiki/Events-Map) |
 | Full change history | [CHANGELOG.md](CHANGELOG.md) |
 | Planned and in-progress work | [Project Board](../../projects) |
 

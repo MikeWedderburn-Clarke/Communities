@@ -11,6 +11,7 @@ Welcome to the **Communities** project wiki. This is a public, SEO-friendly even
 | [Authentication](Authentication) | Mock auth for local dev, Microsoft Entra External ID for production |
 | [Deployment](Deployment) | Azure Container Apps deployment via GitHub Actions |
 | [Architecture](Architecture) | Conventions, engineering principles, and contributing guidelines |
+| [Events Map](Events-Map) | Leaflet map view: drill-down levels, zoom behaviour, custom markers, and tile source |
 
 ## Quick links
 
